@@ -29,6 +29,10 @@
                     <span class="assigned">
                         [Assigned to: {{ task.assigned_to or 'Unassigned' }}]
                     </span>
+
+                    <span class="due-date">
+                        [Due: {{ task.due}}]
+                    </span>
                     <a href="/edit/{{ loop.index0 }}">[EDIT]</a>
                     <a href="/remove/{{ loop.index0 }}">[Remove]</a>
                 </li>
@@ -46,6 +50,7 @@
             <option value="High">High</option>
         </select>
         <input type="text" name="assigned_to" placeholder="Assigned to (optional)">
+        <input type="text" name="due_date" placeholder="Due date">
         <button type="submit">Add</button>
     </form>
 </div>

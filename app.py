@@ -27,13 +27,15 @@ def add():
     text = request.form.get("task", "").strip()
     priority = request.form.get("priority", "Medium")
     assigned_to = request.form.get("assigned_to", "").strip()
+    due = request.form.get("due", "").strip()
 
     if text:
         task = {
             "text": text,
             "done": False,
             "priority": priority,
-            "assigned_to": assigned_to
+            "assigned_to": assigned_to,
+            "due": due
         }
         tasks.append(task)
         save_tasks(tasks)
@@ -60,10 +62,12 @@ def edit(task_id):
         text = request.form.get("task", "").strip()
         priority = request.form.get("priority", "Medium")
         assigned_to = request.form.get("assigned_to", "").strip()
+        due = request.form.get("due", "").strip()
         if text and 0 <= task_id < len(tasks):
             tasks[task_id]["text"] = text
             tasks[task_id]["priority"] = priority
             tasks[task_id]["assigned_to"] = assigned_to
+            tasks[task_id]["due"] = due
             save_tasks(tasks)
         return redirect("/")
     else:

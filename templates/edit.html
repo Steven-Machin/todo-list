@@ -16,6 +16,7 @@
             <option value="High" {% if task.priority == 'High' %}selected{% endif %}>High</option>
         </select>
         <input type="text" name="assigned_to" value="{{ task.assigned_to }}" placeholder="Assigned to (optional)">
+        <input type="text" name="due_date" value="{{ task.due }}" placeholder="Due date">
         <button type="submit">Save Changes</button>
         <a href="/">Cancel</a>
     </form>
