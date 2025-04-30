@@ -25,6 +25,10 @@
                     <span class="priority {{ task.priority|lower }}">
                         [{{ task.priority }}]
                     </span>
+
+                    <span class="assigned">
+                        [Assigned to: {{ task.assigned_to or 'Unassigned' }}]
+                    </span>
                     <a href="/edit/{{ loop.index0 }}">[EDIT]</a>
                     <a href="/remove/{{ loop.index0 }}">[Remove]</a>
                 </li>
@@ -41,6 +45,7 @@
             <option value="Medium" selected>Medium</option>
             <option value="High">High</option>
         </select>
+        <input type="text" name="assigned_to" placeholder="Assigned to (optional)">
         <button type="submit">Add</button>
     </form>
 </div>

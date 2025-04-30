@@ -26,15 +26,19 @@ def index():
 def add():
     text = request.form.get("task", "").strip()
     priority = request.form.get("priority", "Medium")
+    assigned_to = request.form.get("assigned_to", "").strip()
+
     if text:
         task = {
             "text": text,
             "done": False,
-            "priority": priority
+            "priority": priority,
+            "assigned_to": assigned_to
         }
         tasks.append(task)
         save_tasks(tasks)
     return redirect("/")
+
 
 @app.route("/toggle/<int:task_id>")
 def toggle(task_id):
@@ -55,9 +59,11 @@ def edit(task_id):
     if request.method == "POST":
         text = request.form.get("task", "").strip()
         priority = request.form.get("priority", "Medium")
+        assigned_to = request.form.get("assigned_to", "").strip()
         if text and 0 <= task_id < len(tasks):
             tasks[task_id]["text"] = text
             tasks[task_id]["priority"] = priority
+            tasks[task_id]["assigned_to"] = assigned_to
             save_tasks(tasks)
         return redirect("/")
     else:

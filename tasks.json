@@ -8,5 +8,17 @@
     "text": "Keep it up!",
     "done": false,
     "priority": "Medium"
+  },
+  {
+    "text": "Roger",
+    "done": false,
+    "priority": "Medium",
+    "assigned_to": ""
+  },
+  {
+    "text": "Testing now",
+    "done": false,
+    "priority": "Low",
+    "assigned_to": "Steven"
   }
 ]
