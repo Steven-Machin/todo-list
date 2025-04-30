@@ -20,6 +20,16 @@ tasks = load_tasks()
 
 @app.route("/")
 def index():
+    today = datetime.today().date()
+    for task in tasks:
+        if "due" in task and task["due"]:
+            try:
+                due_date = datetime.strptime(task["due"], "%Y-%m-%d").date()
+                task["overdue"] = not task.get("done") and due_date < today
+            except ValueError:
+                task["overdue"] = False
+        else:
+            task["overdue"] = False
     return render_template("index.html", tasks=tasks, app_name="To Do List")
 
 @app.route("/add", methods=["POST"])
@@ -40,7 +50,6 @@ def add():
         tasks.append(task)
         save_tasks(tasks)
     return redirect("/")
-
 
 @app.route("/toggle/<int:task_id>")
 def toggle(task_id):
@@ -77,3 +86,4 @@ def edit(task_id):
 
 if __name__ == "__main__":
     app.run(debug=True)
+

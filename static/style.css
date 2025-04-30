@@ -1,48 +1,84 @@
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: #e9f2fa;
     margin: 0;
-    padding: 0;
-    background: linear-gradient(135deg, #dcecf9, #f8f9fa);
-    min-height: 100vh;
+    padding: 40px 20px;
     display: flex;
     justify-content: center;
-    align-items: flex-start;
-    padding-top: 40px;
-    color: #333;
+}
+
+.container {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    width: 100%;
+    max-width: 650px;
 }
 
 h1 {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 }
 
-.container {
-    background: white;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    max-width: 600px;
-}
-
-ul {
+.task-list {
     list-style: none;
     padding: 0;
+    margin-bottom: 30px;
 }
 
-li {
-    margin-bottom: 12px;
-    padding: 10px;
-    border-radius: 6px;
-    background: #f0f4f8;
+.task-item {
+    background: #f6f9fc;
+    border-left: 6px solid transparent;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    padding: 16px;
+}
+
+.task-item.overdue {
+    border-left-color: crimson;
+    background-color: #ffe3e3;
+}
+
+.task-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.task-text {
+    font-weight: 500;
+    font-size: 1.1rem;
 }
 
 .done {
     text-decoration: line-through;
-    color: #888;
+    color: #777;
+}
+
+.task-meta {
+    font-size: 0.9rem;
+    color: #444;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.task-actions {
+    margin-left: auto;
+}
+
+.task-actions a {
+    margin-left: 10px;
+    color: #d80000;
+    text-decoration: none;
+}
+
+.task-actions a:hover {
+    text-decoration: underline;
 }
 
 .priority.low {
@@ -54,50 +90,57 @@ li {
 }
 
 .priority.high {
-    color: crimson;
+    color: red;
 }
 
-form {
-    margin-top: 20px;
+.toggle-button {
+    background-color: #007acc;
+    border: none;
+    color: white;
+    font-size: 0.9rem;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.toggle-button:hover {
+    background-color: #005fa3;
+}
+
+.add-form {
     display: flex;
-    gap: 10px;
     flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
 }
 
-input[type="text"], select {
+.add-form input[type=\"text\"],
+.add-form input[type=\"date\"],
+.add-form select {
     flex: 1;
-    padding: 8px 10px;
+    padding: 10px;
     border: 1px solid #ccc;
     border-radius: 6px;
     font-size: 1rem;
 }
 
-button {
-    padding: 8px 14px;
-    background-color: #007acc;
-    color: white;
+.add-form button {
+    padding: 10px 20px;
+    font-size: 1rem;
     border: none;
     border-radius: 6px;
+    background-color: #007acc;
+    color: white;
     cursor: pointer;
-    font-size: 1rem;
 }
 
-button:hover {
+.add-form button:hover {
     background-color: #005fa3;
 }
 
-a {
-    margin-left: 8px;
-    text-decoration: none;
-    color: #cc0000;
-}
-
-a:hover {
-    text-decoration: underline;
-}
-
-.assigned {
-    margin-left: 10px;
-    color: #555;
+.empty-state {
+    text-align: center;
+    color: #888;
     font-style: italic;
 }

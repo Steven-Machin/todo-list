@@ -1,58 +1,62 @@
 <!doctype html>
 <html>
 <head>
-    <title>To-Do List</title>
+    <title>Manager Delegation Tool</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class ="container"
-    <h1>Manager Delegation Tool</h1>
+    <div class="container">
+        <h1>Manager Delegation Tool</h1>
 
-    {% if tasks %}
-        <ul>
-            {% for task in tasks %}
-                <li>
-                    <form action="{{ url_for('toggle', task_id=loop.index0) }}" method="get" style="display:inline;">
-                        <button type="submit">
-                            {% if task.done %}✔{% else %}✗{% endif %}
-                        </button>
-                    </form>
+        {% if tasks %}
+            <ul class="task-list">
+                {% for task in tasks %}
+                    <li class="task-item {% if task.overdue %}overdue{% endif %}">
+                        <div class="task-header">
+                            <form action="{{ url_for('toggle', task_id=loop.index0) }}" method="get">
+                                <button class="toggle-button" type="submit">
+                                    {% if task.done %}✔{% else %}✗{% endif %}
+                                </button>
+                            </form>
+                            <span class="task-text {% if task.done %}done{% endif %}">
+                                {{ loop.index }}. {{ task.text }}
+                            </span>
+                        </div>
+                        <div class="task-meta">
+                            <span class="priority {{ task.priority|lower }}">
+                                Priority: {{ task.priority }}
+                            </span>
+                            <span class="assigned">
+                                Assigned to: {{ task.assigned_to or 'Unassigned' }}
+                            </span>
+                            {% if task.due %}
+                                <span class="due">
+                                    Due: {{ task.due }}
+                                </span>
+                            {% endif %}
+                            <div class="task-actions">
+                                <a href="/edit/{{ loop.index0 }}">Edit</a>
+                                <a href="/remove/{{ loop.index0 }}">Remove</a>
+                            </div>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty-state">No tasks found.</p>
+        {% endif %}
 
-                    <span class="{% if task.done %}done{% endif %}">
-                        {{ loop.index }}. {{ task.text }}
-                    </span>
-
-                    <span class="priority {{ task.priority|lower }}">
-                        [{{ task.priority }}]
-                    </span>
-
-                    <span class="assigned">
-                        [Assigned to: {{ task.assigned_to or 'Unassigned' }}]
-                    </span>
-
-                    <span class="due-date">
-                        [Due: {{ task.due}}]
-                    </span>
-                    <a href="/edit/{{ loop.index0 }}">[EDIT]</a>
-                    <a href="/remove/{{ loop.index0 }}">[Remove]</a>
-                </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p>No tasks found.</p>
-    {% endif %}
-
-    <form action="/add" method="post">
-        <input type="text" name="task" placeholder="New task" required>
-        <select name="priority">
-            <option value="Low">Low</option>
-            <option value="Medium" selected>Medium</option>
-            <option value="High">High</option>
-        </select>
-        <input type="text" name="assigned_to" placeholder="Assigned to (optional)">
-        <input type="text" name="due_date" placeholder="Due date">
-        <button type="submit">Add</button>
-    </form>
-</div>
+        <form class="add-form" action="/add" method="post">
+            <input type="text" name="task" placeholder="New task" required>
+            <select name="priority">
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+            </select>
+            <input type="text" name="assigned_to" placeholder="Assigned to (optional)">
+            <input type="date" name="due">
+            <button type="submit">Add</button>
+        </form>
+    </div>
 </body>
 </html>
