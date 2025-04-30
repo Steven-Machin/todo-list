@@ -50,5 +50,20 @@ def remove(task_id):
         save_tasks(tasks)
     return redirect("/")
 
+@app.route("/edit/<int:task_id>", methods=["GET", "POST"])
+def edit(task_id):
+    if request.method == "POST":
+        text = request.form.get("task", "").strip()
+        priority = request.form.get("priority", "Medium")
+        if text and 0 <= task_id < len(tasks):
+            tasks[task_id]["text"] = text
+            tasks[task_id]["priority"] = priority
+            save_tasks(tasks)
+        return redirect("/")
+    else:
+        if 0 <= task_id < len(tasks):
+            return render_template("edit.html", task=tasks[task_id], task_id=task_id)
+    return redirect("/")
+
 if __name__ == "__main__":
     app.run(debug=True)

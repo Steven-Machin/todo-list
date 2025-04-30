@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "text": "Kick a tuna",
+    "done": true,
+    "priority": "High"
+  },
+  {
+    "text": "Keep it up!",
+    "done": false,
+    "priority": "Medium"
+  }
+]

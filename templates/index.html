@@ -5,6 +5,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+    <div class ="container"
     <h1>My To-Do List</h1>
 
     {% if tasks %}
@@ -24,7 +25,7 @@
                     <span class="priority {{ task.priority|lower }}">
                         [{{ task.priority }}]
                     </span>
-
+                    <a href="/edit/{{ loop.index0 }}">[EDIT]</a>
                     <a href="/remove/{{ loop.index0 }}">[Remove]</a>
                 </li>
             {% endfor %}
@@ -42,5 +43,6 @@
         </select>
         <button type="submit">Add</button>
     </form>
+</div>
 </body>
 </html>

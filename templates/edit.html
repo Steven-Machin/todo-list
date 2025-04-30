@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+    <title>Edit Task</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class ="container"
+    <h1>Edit Task</h1>
+
+    <form action="{{ url_for('edit', task_id=task_id) }}" method="post">
+        <input type="text" name="task" value="{{ task.text }}" required>
+        <select name="priority">
+            <option value="Low" {% if task.priority == 'Low' %}selected{% endif %}>Low</option>
+            <option value="Medium" {% if task.priority == 'Medium' %}selected{% endif %}>Medium</option>
+            <option value="High" {% if task.priority == 'High' %}selected{% endif %}>High</option>
+        </select>
+        <button type="submit">Save Changes</button>
+        <a href="/">Cancel</a>
+    </form>
+</div>
+</body>
+</html>
