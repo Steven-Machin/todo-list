@@ -1,12 +1,43 @@
 <!doctype html>
 <html>
 <head>
-    <title>Manager Delegation Tool</title>
+    <title>To-Do List</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
-        <h1>Manager Delegation Tool</h1>
+        <h1>{{ app_name }}</h1>
+        <div style="text-align: right;">
+            <form action="{{ url_for('logout') }}" method="get">
+                <button type="submit" style="background: none; border: none; color: #007acc; cursor: pointer;">Logout</button>
+            </form>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="flash">
+              {% for message in messages %}
+                <p>{{ message }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <div class="summary-bar">
+            <strong>{{ total_tasks }} tasks</strong> —
+            <span>{{ completed_tasks }} completed</span>,
+            <span>{{ remaining_tasks }} remaining</span>
+        </div>
+
+        <form class="filter-form" method="get" action="/">
+            <label for="assignee">Filter by assignee:</label>
+            <select name="assignee" onchange="this.form.submit()">
+                <option value="All" {% if assignee_filter == 'All' %}selected{% endif %}>All</option>
+                {% for name in assignees %}
+                    <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </form>
 
         {% if tasks %}
             <ul class="task-list">
@@ -22,23 +53,26 @@
                                 {{ loop.index }}. {{ task.text }}
                             </span>
                         </div>
+
                         <div class="task-meta">
-                            <span class="priority {{ task.priority|lower }}">
-                                Priority: {{ task.priority }}
-                            </span>
-                            <span class="assigned">
-                                Assigned to: {{ task.assigned_to or 'Unassigned' }}
-                            </span>
+                            <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
+                            <span class="assigned">Assigned to: {{ task.assigned_to or 'Unassigned' }}</span>
                             {% if task.due %}
-                                <span class="due">
-                                    Due: {{ task.due }}
-                                </span>
+                                <span class="due">Due: {{ task.due }}</span>
                             {% endif %}
                             <div class="task-actions">
-                                <a href="/edit/{{ loop.index0 }}">Edit</a>
-                                <a href="/remove/{{ loop.index0 }}">Remove</a>
+                                {% if role == 'manager' or task.assigned_to == current_user %}
+                                    <a href="/edit/{{ loop.index0 }}">Edit</a>
+                                    <a href="/remove/{{ loop.index0 }}">Remove</a>
+                                {% endif %}
                             </div>
                         </div>
+
+                        {% if task.notes %}
+                            <div class="task-notes">
+                                <strong>Notes:</strong> {{ task.notes }}
+                            </div>
+                        {% endif %}
                     </li>
                 {% endfor %}
             </ul>
@@ -53,8 +87,13 @@
                 <option value="Medium" selected>Medium</option>
                 <option value="High">High</option>
             </select>
-            <input type="text" name="assigned_to" placeholder="Assigned to (optional)">
+
+            {% if role == 'manager' %}
+                <input type="text" name="assigned_to" placeholder="Assign to user (optional)">
+            {% endif %}
+
             <input type="date" name="due">
+            <textarea name="notes" placeholder="Optional notes"></textarea>
             <button type="submit">Add</button>
         </form>
     </div>
