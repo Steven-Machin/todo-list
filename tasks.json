@@ -1,21 +1,5 @@
 [
   {
-    "text": "Kick a tuna",
-    "done": true,
-    "priority": "High"
-  },
-  {
-    "text": "Keep it up!",
-    "done": false,
-    "priority": "Medium"
-  },
-  {
-    "text": "Roger",
-    "done": false,
-    "priority": "Medium",
-    "assigned_to": ""
-  },
-  {
     "text": "Testing now",
     "done": false,
     "priority": "Low",
