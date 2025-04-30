@@ -1,19 +1,45 @@
-# To-Do List (Flask Web App)
+To-Do List (Team Task Manager - Flask Web App)
+This is a Flask-based web application for managing and delegating tasks within a small team. It supports multiple users with different roles (manager or member) and allows managers to assign tasks, while team members can view and complete only their assigned items.
 
-This is a simple Flask-based web app for managing a personal to-do list.
-It lets you add tasks, assign priorities, and mark them as complete or incomplete.
-Tasks are saved to a local JSON file so they persist between sessions.
+Tasks and users are stored in local JSON files for persistence between sessions.
 
-## Features
+Features
+User signup/login system
 
-- Add new tasks with a priority (Low, Medium, High)
-- Mark tasks as complete/incomplete
-- Remove tasks from the list
-- Tasks are saved in `tasks.json`
-- Clean, browser-based UI
-- Light styling with optional color indicators
+Role-based access:
 
-## How to Run
-1. Clone the repository
-2. Install Flask if you don’t have it:
-4. Open your browser and go to: https://localhost:5000
+Managers can view, add, assign, edit, and remove tasks
+
+Members can view and edit only their own tasks
+
+Add new tasks with:
+
+Priority (Low, Medium, High)
+
+Due date
+
+Notes
+
+Mark tasks as complete/incomplete
+
+Sort tasks by due date, priority, creation date, or status
+
+Filter tasks by assignee
+
+Data saved locally in tasks.json and users.json
+
+Clean, browser-based UI with light CSS styling
+
+How to Run
+1.Clone the repository
+2.Navigate to the project folder
+3.Create a virtual environment (optional but recommended):
+python -m venv .venv
+.venv\\Scripts\\activate   # Windows
+source .venv/bin/activate  # macOS/Linux
+4.Install dependencies:
+pip install flask werkzeug
+5. Start the Flask app:
+python app.py
+6.Open your browser and go to:
+http://localhost:5000
