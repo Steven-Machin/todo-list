@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+    <title>To-Do List</title>
+</head>
+<body>
+    <h1>My To-Do List</h1>
+
+    {% if tasks %}
+        <ul>
+            {% for task in tasks %}
+                <li>
+                    {{ loop.index }}. {{ task }}
+                    <a href="/remove/{{ loop.index0 }}">[Remove]</a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No tasks found.</p>
+    {% endif %}
+
+    <form action="/add" method="post">
+        <input type="text" name="task" placeholder="New task">
+        <button type="submit">Add</button>
+    </form>
+</body>
+</html>
