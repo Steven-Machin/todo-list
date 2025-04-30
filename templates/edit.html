@@ -18,7 +18,7 @@
             </select>
 
             {% if role == 'manager' %}
-                <input type="text" name="assigned_to" value="{{ task.assigned_to }}" placeholder="Assign to">
+                <input type="text" name="assigned_to" value="{{ task.assigned_to.capitalize() }}" placeholder="Assign to">
             {% else %}
                 <input type="hidden" name="assigned_to" value="{{ task.assigned_to }}">
             {% endif %}
@@ -32,3 +32,4 @@
     </div>
 </body>
 </html>
+

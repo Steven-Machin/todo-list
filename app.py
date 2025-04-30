@@ -30,16 +30,23 @@ def save_users(users):
     with open(USERS_FILE, "w") as file:
         json.dump(users, file, indent=2)
 
-def sort_tasks(task_list):
+def sort_tasks(task_list, key='due'):
+    priority_order = {"High": 0, "Medium": 1, "Low": 2}
+
     def task_sort_key(task):
-        priority_order = {"High": 0, "Medium": 1, "Low": 2}
         due_date = task.get("due") or "9999-12-31"
         done = task.get("done", False)
-        return (
-            datetime.strptime(due_date, "%Y-%m-%d"),
-            priority_order.get(task.get("priority", "Medium"), 1),
-            done
-        )
+        priority = priority_order.get(task.get("priority", "Medium"), 1)
+        created = task.get("created_at") or "9999-12-31T23:59"
+
+        if key == 'priority':
+            return priority
+        elif key == 'created':
+            return datetime.strptime(created, "%Y-%m-%dT%H:%M")
+        elif key == 'status':
+            return done
+        return datetime.strptime(due_date, "%Y-%m-%d")
+
     return sorted(task_list, key=task_sort_key)
 
 def login_required(f):
@@ -59,7 +66,11 @@ def index():
     username = session["username"]
     role = session.get("role", "member")
     assignee_filter = request.args.get("assignee", "All")
+    sort_by = request.args.get("sort", "due")
     today = datetime.today().date()
+
+    users = load_users()
+    assignable_users = sorted([u["username"] for u in users if u.get("role") != "manager"])
 
     for task in tasks:
         if "due" in task and task["due"]:
@@ -74,11 +85,11 @@ def index():
     if role == "manager":
         visible_tasks = tasks
     else:
-        visible_tasks = [t for t in tasks if t.get("assigned_to") == username]
+        visible_tasks = [t for t in tasks if t.get("assigned_to", "").lower() == username.lower()]
 
     assignees = sorted({task["assigned_to"] for task in tasks if task.get("assigned_to")})
     filtered_tasks = [t for t in visible_tasks if assignee_filter == "All" or t.get("assigned_to") == assignee_filter]
-    sorted_filtered_tasks = sort_tasks(filtered_tasks)
+    sorted_filtered_tasks = sort_tasks(filtered_tasks, key=sort_by)
 
     total_tasks = len(filtered_tasks)
     completed_tasks = len([t for t in filtered_tasks if t.get("done")])
@@ -90,11 +101,13 @@ def index():
         app_name="To Do List",
         assignees=assignees,
         assignee_filter=assignee_filter,
+        sort_by=sort_by,
         total_tasks=total_tasks,
         completed_tasks=completed_tasks,
         remaining_tasks=remaining_tasks,
         role=role,
-        current_user=username
+        current_user=username,
+        assignable_users=assignable_users
     )
 
 @app.route("/signup", methods=["GET", "POST"])
@@ -140,10 +153,17 @@ def logout():
 def add():
     text = request.form.get("task", "").strip()
     priority = request.form.get("priority", "Medium")
-    assigned_to = request.form.get("assigned_to", "").strip()
     due = request.form.get("due", "").strip()
     notes = request.form.get("notes", "").strip()
     created_by = session["username"]
+    created_at = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    role = session["role"]
+    username = session["username"]
+
+    if role == "manager":
+        assigned_to = request.form.get("assigned_to", "").strip().lower()
+    else:
+        assigned_to = username
 
     if text:
         task = {
@@ -153,7 +173,8 @@ def add():
             "assigned_to": assigned_to,
             "due": due,
             "notes": notes,
-            "created_by": created_by
+            "created_by": created_by,
+            "created_at": created_at
         }
         tasks.append(task)
         save_tasks(tasks)
@@ -192,7 +213,7 @@ def edit(task_id):
     if request.method == "POST":
         text = request.form.get("task", "").strip()
         priority = request.form.get("priority", "Medium")
-        assigned_to = request.form.get("assigned_to", "").strip()
+        assigned_to = request.form.get("assigned_to", "").strip().lower()
         due = request.form.get("due", "").strip()
         notes = request.form.get("notes", "").strip()
 

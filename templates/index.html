@@ -7,20 +7,19 @@
 <body>
     <div class="container">
         <h1>{{ app_name }}</h1>
+
         <div style="text-align: right;">
-            <form action="{{ url_for('logout') }}" method="get">
-                <button type="submit" style="background: none; border: none; color: #007acc; cursor: pointer;">Logout</button>
-            </form>
+            <a href="{{ url_for('logout') }}">Logout</a>
         </div>
 
         {% with messages = get_flashed_messages() %}
-          {% if messages %}
+        {% if messages %}
             <div class="flash">
-              {% for message in messages %}
-                <p>{{ message }}</p>
-              {% endfor %}
+                {% for message in messages %}
+                    <p>{{ message }}</p>
+                {% endfor %}
             </div>
-          {% endif %}
+        {% endif %}
         {% endwith %}
 
         <div class="summary-bar">
@@ -31,12 +30,22 @@
 
         <form class="filter-form" method="get" action="/">
             <label for="assignee">Filter by assignee:</label>
-            <select name="assignee" onchange="this.form.submit()">
+            <select name="assignee">
                 <option value="All" {% if assignee_filter == 'All' %}selected{% endif %}>All</option>
                 {% for name in assignees %}
-                    <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name }}</option>
+                    <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name.capitalize() }}</option>
                 {% endfor %}
             </select>
+
+            <label for="sort">Sort by:</label>
+            <select name="sort">
+                <option value="due" {% if sort_by == 'due' %}selected{% endif %}>Due Date</option>
+                <option value="priority" {% if sort_by == 'priority' %}selected{% endif %}>Priority</option>
+                <option value="created" {% if sort_by == 'created' %}selected{% endif %}>Created</option>
+                <option value="status" {% if sort_by == 'status' %}selected{% endif %}>Status</option>
+            </select>
+
+            <button type="submit">Apply</button>
         </form>
 
         {% if tasks %}
@@ -56,9 +65,12 @@
 
                         <div class="task-meta">
                             <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
-                            <span class="assigned">Assigned to: {{ task.assigned_to or 'Unassigned' }}</span>
+                            <span class="assigned">Assigned to: {{ task.assigned_to.capitalize() if task.assigned_to else 'Unassigned' }}</span>
                             {% if task.due %}
                                 <span class="due">Due: {{ task.due }}</span>
+                            {% endif %}
+                            {% if task.created_at %}
+                                <span class="created">Created: {{ task.created_at }}</span>
                             {% endif %}
                             <div class="task-actions">
                                 {% if role == 'manager' or task.assigned_to == current_user %}
@@ -89,7 +101,12 @@
             </select>
 
             {% if role == 'manager' %}
-                <input type="text" name="assigned_to" placeholder="Assign to user (optional)">
+            <select name="assigned_to">
+                <option value="">-- Unassigned --</option>
+                {% for user in assignable_users %}
+                    <option value="{{ user }}">{{ user.capitalize() }}</option>
+                {% endfor %}
+            </select>
             {% endif %}
 
             <input type="date" name="due">
@@ -99,3 +116,4 @@
     </div>
 </body>
 </html>
+

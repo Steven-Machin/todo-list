@@ -3,5 +3,10 @@
     "username": "steven",
     "password": "scrypt:32768:8:1$f2S0e0RpyWVqWrn7$e6b955468b95487d6a88b8ce1b29dcdface05b390f470c185e6e342c90b63c89bc2ed528a9e211ba7a4e26cd5ef1deddcde8b4a68125bf643c1ec6990e0cf599",
     "role": "manager"
+  },
+  {
+    "username": "liz",
+    "password": "scrypt:32768:8:1$sTdTzV6J7ZIz1VnY$ebc2db149ad2f5c4e369306d07d3671adcd259aa534bf24c128e758a4ee49bdde7b23c3a4e3b7315f7213618529e8f4fe6958ece6d0ac0237dedb4748460b439",
+    "role": "member"
   }
 ]
