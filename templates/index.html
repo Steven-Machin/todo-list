@@ -3,7 +3,6 @@
 <head>
     <title>To-Do List</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-
 </head>
 <body>
     <h1>My To-Do List</h1>
@@ -12,7 +11,20 @@
         <ul>
             {% for task in tasks %}
                 <li>
-                    {{ loop.index }}. {{ task }}
+                    <form action="{{ url_for('toggle', task_id=loop.index0) }}" method="get" style="display:inline;">
+                        <button type="submit">
+                            {% if task.done %}✔{% else %}✗{% endif %}
+                        </button>
+                    </form>
+
+                    <span class="{% if task.done %}done{% endif %}">
+                        {{ loop.index }}. {{ task.text }}
+                    </span>
+
+                    <span class="priority {{ task.priority|lower }}">
+                        [{{ task.priority }}]
+                    </span>
+
                     <a href="/remove/{{ loop.index0 }}">[Remove]</a>
                 </li>
             {% endfor %}
@@ -22,7 +34,12 @@
     {% endif %}
 
     <form action="/add" method="post">
-        <input type="text" name="task" placeholder="New task">
+        <input type="text" name="task" placeholder="New task" required>
+        <select name="priority">
+            <option value="Low">Low</option>
+            <option value="Medium" selected>Medium</option>
+            <option value="High">High</option>
+        </select>
         <button type="submit">Add</button>
     </form>
 </body>

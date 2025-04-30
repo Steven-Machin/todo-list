@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, url_for
 import json
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 TASKS_FILE = "tasks.json"
@@ -19,13 +20,26 @@ tasks = load_tasks()
 
 @app.route("/")
 def index():
-    return render_template("index.html", tasks=tasks)
+    return render_template("index.html", tasks=tasks, app_name="To Do List")
 
 @app.route("/add", methods=["POST"])
 def add():
-    task = request.form.get("task", "").strip()
-    if task:
+    text = request.form.get("task", "").strip()
+    priority = request.form.get("priority", "Medium")
+    if text:
+        task = {
+            "text": text,
+            "done": False,
+            "priority": priority
+        }
         tasks.append(task)
+        save_tasks(tasks)
+    return redirect("/")
+
+@app.route("/toggle/<int:task_id>")
+def toggle(task_id):
+    if 0 <= task_id < len(tasks):
+        tasks[task_id]["done"] = not tasks[task_id]["done"]
         save_tasks(tasks)
     return redirect("/")
 
