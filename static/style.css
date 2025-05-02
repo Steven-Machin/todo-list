@@ -259,8 +259,9 @@ form button:hover {
     gap: 20px;
     width: 100%;
     max-width: 1280px;
-    box-sizing: border-box;
+    margin: 0 auto;
     padding: 0 20px 40px;
+    box-sizing: border-box;
 }
 
 .shift-preview,
@@ -268,8 +269,12 @@ form button:hover {
     width: 100%;
 }
 
+.full-width {
+    width: 100% !important;
+}
+
 @media (min-width: 900px) {
-    .dashboard-grid {
+    .dashboard-grid.manager {
         flex-direction: row;
         align-items: flex-start;
     }

@@ -1,4 +1,3 @@
-<!doctype html>
 <html>
 <head>
     <title>To-Do List</title>
@@ -15,9 +14,9 @@
         <a href="{{ url_for('logout') }}">Logout</a>
     </div>
 
-    <h1 style="text-align:center;">{{ app_name }}</h1>
+    <h1>{{ app_name }}</h1>
 
-    <div class="dashboard-grid">
+    <div class="dashboard-grid {% if role == 'manager' %}manager{% endif %}">
         {% if role == 'manager' %}
         <div class="container shift-preview">
             {% if next_shift %}
@@ -26,29 +25,13 @@
                     {{ next_shift.date }} from {{ next_shift.start_time }} to {{ next_shift.end_time }}
                     {% if next_shift.notes %}<br>{{ next_shift.notes }}{% endif %}
                 </div>
+            {% else %}
+                <div class="banner info">You have no upcoming shifts scheduled.</div>
             {% endif %}
-
-            <form class="add-form" action="/add" method="post">
-                <input type="text" name="task" placeholder="New task" required>
-                <select name="priority">
-                    <option value="Low">Low</option>
-                    <option value="Medium" selected>Medium</option>
-                    <option value="High">High</option>
-                </select>
-                <select name="assigned_to">
-                    <option value="">-- Unassigned --</option>
-                    {% for user in assignable_users %}
-                        <option value="{{ user }}">{{ user }}</option>
-                    {% endfor %}
-                </select>
-                <input type="date" name="due">
-                <textarea name="notes" placeholder="Optional notes"></textarea>
-                <button type="submit">Add</button>
-            </form>
         </div>
         {% endif %}
 
-        <div class="container task-panel">
+        <div class="container task-panel {% if role != 'manager' %}full-width{% endif %}">
             {% with messages = get_flashed_messages() %}
                 {% if messages %}
                     <div class="flash">
@@ -66,6 +49,7 @@
             </div>
 
             <form class="filter-form" method="get" action="/">
+                {% if role == 'manager' %}
                 <label for="assignee">Filter by assignee:</label>
                 <select name="assignee">
                     <option value="All" {% if assignee_filter == 'All' %}selected{% endif %}>All</option>
@@ -73,6 +57,7 @@
                         <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name }}</option>
                     {% endfor %}
                 </select>
+                {% endif %}
 
                 <label for="sort">Sort by:</label>
                 <select name="sort">
@@ -127,6 +112,28 @@
                 </ul>
             {% else %}
                 <p class="empty-state">No tasks found.</p>
+            {% endif %}
+
+            {% if role == 'manager' %}
+            <form class="add-form" action="/add" method="post">
+                <input type="text" name="task" placeholder="New task" required>
+                <select name="priority">
+                    <option value="Low">Low</option>
+                    <option value="Medium" selected>Medium</option>
+                    <option value="High">High</option>
+                </select>
+
+                <select name="assigned_to">
+                    <option value="">-- Unassigned --</option>
+                    {% for user in assignable_users %}
+                        <option value="{{ user }}">{{ user }}</option>
+                    {% endfor %}
+                </select>
+
+                <input type="date" name="due">
+                <textarea name="notes" placeholder="Optional notes"></textarea>
+                <button type="submit">Add</button>
+            </form>
             {% endif %}
         </div>
     </div>
