@@ -5,137 +5,130 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>{{ app_name }}</h1>
-
+    <div class="top-nav">
+        {% if role == 'member' %}
+            <a href="{{ url_for('my_shifts') }}">See Shifts</a>
+        {% endif %}
         {% if role == 'manager' %}
-    <a href="{{ url_for('view_shifts') }}">Manage Shifts</a>
-{% endif %}
-
-{% if role == 'member' %}
-    <a href="{{ url_for('my_shifts') }}">See Shifts</a>
-{% endif %}
-
-{% if role == 'member' and next_shift %}
-    <div class="next-shift-banner">
-        <strong>Your next shift:</strong>
-        {{ next_shift.date }} from {{ next_shift.start_time }} to {{ next_shift.end_time }}
-        {% if next_shift.notes %} — {{ next_shift.notes }}{% endif %}
-    </div>
-{% elif role == 'member' %}
-    <div class="next-shift-banner">
-        <strong>You have no upcoming shifts scheduled.</strong>
-    </div>
-{% endif %}
-
-
-
-        <div style="text-align: right;">
-            <a href="{{ url_for('logout') }}">Logout</a>
-        </div>
-
-        {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <div class="flash">
-                {% for message in messages %}
-                    <p>{{ message }}</p>
-                {% endfor %}
-            </div>
+            <a href="{{ url_for('view_shifts') }}">Manage Shifts</a>
         {% endif %}
-        {% endwith %}
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </div>
 
-        <div class="summary-bar">
-            <strong>{{ total_tasks }} tasks</strong> —
-            <span>{{ completed_tasks }} completed</span>,
-            <span>{{ remaining_tasks }} remaining</span>
-        </div>
+    <h1 style="text-align:center;">{{ app_name }}</h1>
 
-        <form class="filter-form" method="get" action="/">
-            <label for="assignee">Filter by assignee:</label>
-            <select name="assignee">
-                <option value="All" {% if assignee_filter == 'All' %}selected{% endif %}>All</option>
-                {% for name in assignees %}
-                    <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name.capitalize() }}</option>
-                {% endfor %}
-            </select>
-
-            <label for="sort">Sort by:</label>
-            <select name="sort">
-                <option value="due" {% if sort_by == 'due' %}selected{% endif %}>Due Date</option>
-                <option value="priority" {% if sort_by == 'priority' %}selected{% endif %}>Priority</option>
-                <option value="created" {% if sort_by == 'created' %}selected{% endif %}>Created</option>
-                <option value="status" {% if sort_by == 'status' %}selected{% endif %}>Status</option>
-            </select>
-
-            <button type="submit">Apply</button>
-        </form>
-
-        {% if tasks %}
-            <ul class="task-list">
-                {% for task in tasks %}
-                    <li class="task-item {% if task.overdue %}overdue{% endif %}">
-                        <div class="task-header">
-                            <form action="{{ url_for('toggle', task_id=loop.index0) }}" method="get">
-                                <button class="toggle-button" type="submit">
-                                    {% if task.done %}✔{% else %}✗{% endif %}
-                                </button>
-                            </form>
-                            <span class="task-text {% if task.done %}done{% endif %}">
-                                {{ loop.index }}. {{ task.text }}
-                            </span>
-                        </div>
-
-                        <div class="task-meta">
-                            <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
-                            <span class="assigned">Assigned to: {{ task.assigned_to.capitalize() if task.assigned_to else 'Unassigned' }}</span>
-                            {% if task.due %}
-                                <span class="due">Due: {{ task.due }}</span>
-                            {% endif %}
-                            {% if task.created_at %}
-                                <span class="created">Created: {{ task.created_at }}</span>
-                            {% endif %}
-                            <div class="task-actions">
-                                {% if role == 'manager' or task.assigned_to == current_user %}
-                                    <a href="/edit/{{ loop.index0 }}">Edit</a>
-                                    <a href="/remove/{{ loop.index0 }}">Remove</a>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        {% if task.notes %}
-                            <div class="task-notes">
-                                <strong>Notes:</strong> {{ task.notes }}
-                            </div>
-                        {% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p class="empty-state">No tasks found.</p>
-        {% endif %}
-
-        <form class="add-form" action="/add" method="post">
-            <input type="text" name="task" placeholder="New task" required>
-            <select name="priority">
-                <option value="Low">Low</option>
-                <option value="Medium" selected>Medium</option>
-                <option value="High">High</option>
-            </select>
-
-            {% if role == 'manager' %}
-            <select name="assigned_to">
-                <option value="">-- Unassigned --</option>
-                {% for user in assignable_users %}
-                    <option value="{{ user }}">{{ user.capitalize() }}</option>
-                {% endfor %}
-            </select>
+    <div class="dashboard-grid">
+        {% if role == 'manager' %}
+        <div class="container shift-preview">
+            {% if next_shift %}
+                <div class="banner info">
+                    <strong>Your next shift:</strong><br>
+                    {{ next_shift.date }} from {{ next_shift.start_time }} to {{ next_shift.end_time }}
+                    {% if next_shift.notes %}<br>{{ next_shift.notes }}{% endif %}
+                </div>
             {% endif %}
 
-            <input type="date" name="due">
-            <textarea name="notes" placeholder="Optional notes"></textarea>
-            <button type="submit">Add</button>
-        </form>
+            <form class="add-form" action="/add" method="post">
+                <input type="text" name="task" placeholder="New task" required>
+                <select name="priority">
+                    <option value="Low">Low</option>
+                    <option value="Medium" selected>Medium</option>
+                    <option value="High">High</option>
+                </select>
+                <select name="assigned_to">
+                    <option value="">-- Unassigned --</option>
+                    {% for user in assignable_users %}
+                        <option value="{{ user }}">{{ user }}</option>
+                    {% endfor %}
+                </select>
+                <input type="date" name="due">
+                <textarea name="notes" placeholder="Optional notes"></textarea>
+                <button type="submit">Add</button>
+            </form>
+        </div>
+        {% endif %}
+
+        <div class="container task-panel">
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="flash">
+                        {% for message in messages %}
+                            <p>{{ message }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="summary-bar">
+                <strong>{{ total_tasks }} tasks</strong> —
+                <span>{{ completed_tasks }} completed</span>,
+                <span>{{ remaining_tasks }} remaining</span>
+            </div>
+
+            <form class="filter-form" method="get" action="/">
+                <label for="assignee">Filter by assignee:</label>
+                <select name="assignee">
+                    <option value="All" {% if assignee_filter == 'All' %}selected{% endif %}>All</option>
+                    {% for name in assignees %}
+                        <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+
+                <label for="sort">Sort by:</label>
+                <select name="sort">
+                    <option value="due" {% if sort_by == 'due' %}selected{% endif %}>Due Date</option>
+                    <option value="priority" {% if sort_by == 'priority' %}selected{% endif %}>Priority</option>
+                    <option value="created" {% if sort_by == 'created' %}selected{% endif %}>Created</option>
+                    <option value="status" {% if sort_by == 'status' %}selected{% endif %}>Status</option>
+                </select>
+
+                <button type="submit">Apply</button>
+            </form>
+
+            {% if tasks %}
+                <ul class="task-list">
+                    {% for task in tasks %}
+                        <li class="task-item {% if task.overdue %}overdue{% endif %}">
+                            <div class="task-header">
+                                <form action="{{ url_for('toggle', task_id=loop.index0) }}" method="get">
+                                    <button class="toggle-button" type="submit">
+                                        {% if task.done %}✔{% else %}✗{% endif %}
+                                    </button>
+                                </form>
+                                <span class="task-text {% if task.done %}done{% endif %}">
+                                    {{ loop.index }}. {{ task.text }}
+                                </span>
+                            </div>
+
+                            <div class="task-meta">
+                                <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
+                                <span class="assigned">Assigned to: {{ task.assigned_to or 'Unassigned' }}</span>
+                                {% if task.due %}
+                                    <span class="due">Due: {{ task.due }}</span>
+                                {% endif %}
+                                {% if task.created_at %}
+                                    <span class="created">Created: {{ task.created_at }}</span>
+                                {% endif %}
+                                <div class="task-actions">
+                                    {% if role == 'manager' or task.assigned_to == current_user %}
+                                        <a href="/edit/{{ loop.index0 }}">Edit</a>
+                                        <a href="/remove/{{ loop.index0 }}">Remove</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if task.notes %}
+                                <div class="task-notes">
+                                    <strong>Notes:</strong> {{ task.notes }}
+                                </div>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="empty-state">No tasks found.</p>
+            {% endif %}
+        </div>
     </div>
 </body>
 </html>
-
