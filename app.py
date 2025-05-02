@@ -334,41 +334,44 @@ def my_shifts():
 @login_required
 def tasks_page():
     username = session["username"]
-    role = session.get("role", "member")
-    assignee_filter = request.args.get("assignee", "All")
-    sort_by = request.args.get("sort", "due")
-    today = datetime.today().date()
+    role     = session.get("role", "member")
+    sort_by  = request.args.get("sort",  "due")
+    today    = datetime.today().date()
 
     users = load_users()
-    assignable_users = sorted([u["username"].capitalize() for u in users if u.get("role") != "manager"])
 
-    for task in tasks:
-        if "due" in task and task["due"]:
-            try:
-                due_date = datetime.strptime(task["due"], "%Y-%m-%d").date()
-                task["overdue"] = not task.get("done") and due_date < today
-            except ValueError:
-                task["overdue"] = False
-        else:
-            task["overdue"] = False
+    # define your eligible titles (lowercase for comparison)
+    eligible = {
+        "assistant manager", "family swim supervisor", "lead supervisor",
+        "swim administrator", "programming supervisor", "supervisor"
+    }
 
+    # only managers get all tasks, others only their own
     visible_tasks = tasks if role == "manager" else [
-        t for t in tasks if t.get("assigned_to", "").lower() == username.lower()
+        t for t in tasks if t.get("assigned_to","").lower() == username.lower()
     ]
-    filtered_tasks = [
-        t for t in visible_tasks
-        if assignee_filter == "All" or t.get("assigned_to") == assignee_filter
-    ]
-    sorted_filtered_tasks = sort_tasks(filtered_tasks, key=sort_by)
+
+    # sort/filter tasks as before...
+    sorted_tasks = sort_tasks(visible_tasks, key=sort_by)
+
+    # pass full user objects whose titles intersect eligible set
+    if role == "manager":
+        assignable_users = [
+            u for u in users
+            if u.get("role") != "manager"
+            and any(title.lower() in eligible for title in u.get("titles", []))
+        ]
+    else:
+        assignable_users = []
 
     return render_template(
         "task_manager.html",
-        tasks=sorted_filtered_tasks,
+        tasks=sorted_tasks,
         role=role,
-        assignees=[t["assigned_to"].capitalize() for t in tasks if "assigned_to" in t],
-        assignee_filter=assignee_filter,
+        sort_by=sort_by,
         assignable_users=assignable_users
     )
+
 
 @app.route("/groups")
 @login_required

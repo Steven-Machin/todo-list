@@ -25,5 +25,12 @@
     "titles": [
       "Lead Swim Instructor"
     ]
+  },
+  {
+    "username": "ethan",
+    "display_name": "Ethan",
+    "password": "scrypt:32768:8:1$eRV6S8I7HkheCaXN$9158da4daedfddfc01d7d7c422fffe43f0eba12ca32f0984539c0c813cd95ec378a3d69fdf160905bf2a36e28aa1b42f11cf3bc26b8e11f41092db208474401f",
+    "role": "member",
+    "titles": []
   }
 ]

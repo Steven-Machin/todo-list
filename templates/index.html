@@ -71,6 +71,9 @@
       <ul class="task-list">
         {% for task in tasks %}
           <li class="task-item {% if task.overdue %}overdue{% endif %}">
+            <form method="post" action="/toggle/{{ loop.index0 }}">
+                <input type="checkbox" name="done" onchange="this.form.submit()" {% if task.done %}checked{% endif %}>
+              </form>
             <span class="task-text {% if task.done %}done{% endif %}">{{ loop.index }}. {{ task.text }}</span>
             <div class="task-meta">
               {% if task.due %}<span class="due">Due: {{ task.due }}</span>{% endif %}

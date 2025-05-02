@@ -22,12 +22,12 @@
 
     {% if role == 'manager' %}
       <form class="filter-form" method="get" action="/tasks">
-        <label for="assignee">Filter by assignee:</label>
-        <select name="assignee">
-          <option value="All" {% if assignee_filter == 'All' %}selected{% endif %}>All</option>
-          {% for name in assignees %}
-            <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name }}</option>
-          {% endfor %}
+        <label for="sort">Sort by:</label>
+        <select name="sort">
+          <option value="due" {% if sort_by == 'due' %}selected{% endif %}>Due Date</option>
+          <option value="priority" {% if sort_by == 'priority' %}selected{% endif %}>Priority</option>
+          <option value="created" {% if sort_by == 'created' %}selected{% endif %}>Date Assigned</option>
+          <option value="status" {% if sort_by == 'status' %}selected{% endif %}>Completed</option>
         </select>
         <button type="submit">Apply</button>
       </form>
@@ -36,6 +36,9 @@
         {% for task in tasks %}
           <li class="task-item {% if task.overdue %}overdue{% endif %}">
             <div class="task-header">
+              <form method="post" action="/toggle/{{ loop.index0 }}">
+                <input type="checkbox" name="done" onchange="this.form.submit()" {% if task.done %}checked{% endif %}>
+              </form>
               <span class="task-text {% if task.done %}done{% endif %}">{{ loop.index }}. {{ task.text }}</span>
             </div>
             <div class="task-meta">
@@ -43,6 +46,7 @@
               <span class="assigned">Assigned to: {{ task.assigned_to }}</span>
               {% if task.due %}<span class="due">Due: {{ task.due }}</span>{% endif %}
               {% if task.created_at %}<span class="created">Created: {{ task.created_at }}</span>{% endif %}
+              {% if task.completed_at %}<span class="completed">Completed: {{ task.completed_at }}</span>{% endif %}
             </div>
             {% if task.notes %}
               <div class="task-notes">
@@ -71,9 +75,10 @@
           <select name="assigned_to">
             <option value="">-- Unassigned --</option>
             {% for user in assignable_users %}
-              <option value="{{ user }}">{{ user }}</option>
+              <option value="{{ user.username }}">{{ user.display_name }}</option>
             {% endfor %}
           </select>
+
 
           <input type="date" name="due">
           <textarea name="notes" placeholder="Optional notes"></textarea>
