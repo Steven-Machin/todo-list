@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+    <title>My Shifts</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>My Upcoming Shifts</h1>
+
+        <a href="/">Back to Tasks</a>
+
+        {% if shifts %}
+            <ul class="shift-list">
+                {% for shift in shifts %}
+                    <li>
+                        <strong>{{ shift.date }}</strong> |
+                        {{ shift.start_time }} - {{ shift.end_time }}
+                        {% if shift.notes %} — {{ shift.notes }}{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>You have no upcoming shifts.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

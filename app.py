@@ -9,6 +9,7 @@ app = Flask(__name__)
 app.secret_key = "manager-task-secret"
 TASKS_FILE = "tasks.json"
 USERS_FILE = "users.json"
+SHIFTS_FILE = "shifts.json"
 
 def load_tasks():
     if os.path.exists(TASKS_FILE):
@@ -57,6 +58,16 @@ def login_required(f):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated_function
+
+def load_shifts():
+    if os.path.exists(SHIFTS_FILE):
+        with open(SHIFTS_FILE, "r") as file:
+            return json.load(file)
+    return []
+
+def save_shifts(shifts):
+    with open(SHIFTS_FILE, "w") as file:
+        json.dump(shifts, file, indent=2)
 
 tasks = load_tasks()
 
@@ -205,6 +216,7 @@ def remove(task_id):
             flash("Task removed.")
     return redirect("/")
 
+
 @app.route("/edit/<int:task_id>", methods=["GET", "POST"])
 @login_required
 def edit(task_id):
@@ -232,6 +244,55 @@ def edit(task_id):
             if role == "manager" or tasks[task_id].get("assigned_to") == username:
                 return render_template("edit.html", task=tasks[task_id], task_id=task_id, role=role)
     return redirect("/")
+
+@app.route("/shifts")
+@login_required
+def view_shifts():
+    if session.get("role") != "manager":
+        return redirect("/")
+    shifts = load_shifts()
+    return render_template("shifts.html", shifts=shifts)
+
+@app.route("/shifts/add", methods=["GET", "POST"])
+@login_required
+def add_shift():
+    if session.get("role") != "manager":
+        return redirect("/")
+
+    if request.method == "POST":
+        date = request.form.get("date")
+        start_time = request.form.get("start_time")
+        end_time = request.form.get("end_time")
+        assigned_to = request.form.get("assigned_to", "").strip().lower()
+        notes = request.form.get("notes", "")
+
+        if date and start_time and end_time and assigned_to:
+            shifts = load_shifts()
+            shifts.append({
+                "date": date,
+                "start_time": start_time,
+                "end_time": end_time,
+                "assigned_to": assigned_to,
+                "notes": notes
+            })
+            save_shifts(shifts)
+            flash("Shift added successfully.")
+            return redirect(url_for("view_shifts"))
+        else:
+            flash("All fields except notes are required.")
+
+    users = load_users()
+    employees = sorted([u["username"] for u in users if u.get("role") != "manager"])
+    return render_template("add_shift.html", employees=employees)
+
+@app.route("/my-shifts")
+@login_required
+def my_shifts():
+    username = session.get("username")
+    shifts = load_shifts()
+    user_shifts = [s for s in shifts if s["assigned_to"].lower() == username.lower()]
+    return render_template("my_shifts.html", shifts=user_shifts)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

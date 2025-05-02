@@ -8,6 +8,15 @@
     <div class="container">
         <h1>{{ app_name }}</h1>
 
+        {% if role == 'manager' %}
+    <a href="{{ url_for('view_shifts') }}">Manage Shifts</a>
+{% endif %}
+
+{% if role == 'member' %}
+    <a href="{{ url_for('my_shifts') }}">See Shifts</a>
+{% endif %}
+
+
         <div style="text-align: right;">
             <a href="{{ url_for('logout') }}">Logout</a>
         </div>

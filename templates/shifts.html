@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+    <title>All Shifts</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>All Scheduled Shifts</h1>
+
+        <a href="{{ url_for('add_shift') }}">+ Add New Shift</a> |
+        <a href="/">Back to Tasks</a>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <div class="flash">
+                {% for message in messages %}
+                    <p>{{ message }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% endwith %}
+
+        {% if shifts %}
+            <ul class="shift-list">
+                {% for shift in shifts %}
+                    <li>
+                        <strong>{{ shift.date }}</strong> |
+                        {{ shift.start_time }} - {{ shift.end_time }} |
+                        Assigned to: {{ shift.assigned_to.capitalize() }}
+                        {% if shift.notes %} — {{ shift.notes }}{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No shifts scheduled yet.</p>
+        {% endif %}
+    </div>
+</body>
+</html>
