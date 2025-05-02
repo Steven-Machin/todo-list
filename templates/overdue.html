@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Overdue Tasks</h1>
+  <ul>
+    {% for idx, t in overdue %}
+      <li>
+        <strong>{{ t.text }}</strong> (Due {{ t.due }}, Priority {{ t.priority }}, Assigned {{ t.assigned_to }})
+        &nbsp;<a href="{{ url_for('remove', task_id=idx) }}">Remove</a>
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}

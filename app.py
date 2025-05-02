@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 import json
 import os
 from datetime import datetime
@@ -197,7 +197,9 @@ def logout():
 def add():
     text = request.form.get("task", "").strip()
     priority = request.form.get("priority", "Medium")
-    due = request.form.get("due", "").strip()
+    due_date    = request.form.get("due_date", "").strip()     # renamed
+    due_time    = request.form.get("due_time", "").strip()     # new
+    recurring   = request.form.get("recurring") == "weekly"    # new checkbox
     notes = request.form.get("notes", "").strip()
     created_by = session["username"]
     created_at = datetime.now().strftime("%Y-%m-%dT%H:%M")
@@ -219,27 +221,50 @@ def add():
             "done": False,
             "priority": priority,
             "assigned_to": assigned_to,
-            "due": due,
+            "due_date": due_date,            # YYYY-MM-DD or ""
+            "due_time": due_time or None,    # "HH:MM" or None
+            "recurring": "weekly" if recurring else None,
             "notes": notes,
             "created_by": created_by,
-            "created_at": created_at
+            "created_at": datetime.now().strftime("%Y-%m-%dT%H:%M")
         }
         tasks.append(task)
         save_tasks(tasks)
         flash("Task added successfully.")
     return redirect("/")
 
-@app.route("/toggle/<int:task_id>")
+@app.route("/toggle/<int:task_id>", methods=["POST"])
 @login_required
 def toggle(task_id):
     username = session["username"]
-    role = session["role"]
+    role     = session["role"]
+
     if 0 <= task_id < len(tasks):
-        if role == "manager" or tasks[task_id].get("assigned_to") == username:
-            tasks[task_id]["done"] = not tasks[task_id]["done"]
+        t = tasks[task_id]
+        # only allowed actors
+        if role == "manager" or t.get("assigned_to","").lower() == username.lower():
+            t["done"] = not t["done"]
+
+            # record when they flipped it
+            if t["done"]:
+                t["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M")
+                # if this was a weekly task, schedule next week
+                if t.get("recurring") == "weekly" and t.get("due_date"):
+                    dd = datetime.strptime(t["due_date"], "%Y-%m-%d").date() + timedelta(weeks=1)
+                    new = t.copy()
+                    new.update({
+                        "done": False,
+                        "due_date": dd.strftime("%Y-%m-%d"),
+                        "completed_at": None
+                    })
+                    tasks.append(new)
+            else:
+                t.pop("completed_at", None)
+
             save_tasks(tasks)
             flash("Task status updated.")
     return redirect("/")
+
 
 @app.route("/remove/<int:task_id>")
 @login_required
@@ -423,16 +448,76 @@ def title_manager():
 def update_titles():
     if session.get("role") != "manager":
         return redirect("/")
+
     users = load_users()
     for user in users:
-        form_key = f"titles_{user['username']}"
-        if form_key in request.form:
-            raw_titles = request.form[form_key].split(',')
-            user["titles"] = [title.strip() for title in raw_titles if title.strip()]
+        uname = user["username"]
+
+        # 1) Handle “add title” form
+        add_key = f"add_title_{uname}"
+        if add_key in request.form:
+            new_title = request.form[add_key].strip()
+            if new_title:
+                # initialize if missing
+                user.setdefault("titles", [])
+                # only append if not already present
+                if new_title not in user["titles"]:
+                    user["titles"].append(new_title)
+
+        # 2) Handle “remove title” links
+        rem_key = f"remove_title_{uname}"
+        if rem_key in request.form:
+            rem = request.form[rem_key]
+            user["titles"] = [t for t in user.get("titles", []) if t != rem]
+
     save_users(users)
     flash("Titles updated.")
     return redirect(url_for("title_manager"))
 
+@app.route("/calendar")
+@login_required
+def calendar_view():
+    # only managers need the full calendar; members could be redirected or shown just their days
+    return render_template("calendar.html", role=session["role"])
+
+@app.route("/api/tasks/events")
+@login_required
+def task_events():
+    # produce a simple list of events FullCalendar can consume
+    evts = []
+    for idx, t in enumerate(load_tasks()):
+        if t.get("due"):
+            evts.append({
+                "id": idx,
+                "title": f"{t['text']} ({t['priority']})",
+                "start": t["due"],
+                # FullCalendar can color‐code based on custom data
+                "color": {"High":"#f66","Medium":"#fa6","Low":"#6a6"}[t["priority"]],
+                "extendedProps": {
+                  "assigned_to": t["assigned_to"],
+                  "notes": t.get("notes",""),
+                  "done": t.get("done",False)
+                }
+            })
+    return jsonify(evts)
+
+@app.route("/overdue")
+@login_required
+def overdue_tasks():
+    today = datetime.today().date()
+    overdue = [
+      (i,t) for i,t in enumerate(load_tasks())
+      if not t.get("done") and t.get("due") and datetime.strptime(t["due"],"%Y-%m-%d").date() < today
+    ]
+    return render_template("overdue.html", overdue=overdue)
+
+@app.route("/settings")
+@login_required
+def settings():
+    # you can restrict to managers if you like:
+    # if session.get("role") != "manager":
+    #     return redirect("/")
+    return render_template("settings.html")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>4-Week Calendar View – To Do App</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.4/main.min.css" rel="stylesheet">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="{{ url_for('index') }}">Home</a>
+    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
+    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+    <a href="{{ url_for('settings') }}">Settings</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+  </div>
+
+  <div class="main-content">
+    <h1>Calendar</h1>
+    <div class="calendar-container">
+      <div id="calendar"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.4/index.global.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const calendarEl = document.getElementById('calendar');
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridWeek',
+        firstDay: 0,
+
+        // Row 1: just the date-range title
+        headerToolbar: {
+          left:  '',
+          center:'title',
+          right: ''
+        },
+
+        // Row 2: all of the buttons
+        footerToolbar: {
+          left:  'dayGridDay,dayGridWeek,dayGridMonth',
+          center:'',
+          right: 'prev,next today'
+        },
+
+        // keep the calendar “body” at a fixed height
+        height: 600,
+        center_width: 600,
+        
+        // you can tweak this value
+        // contentHeight: 500, // or use contentHeight instead
+
+        events: '/api/tasks/events',
+        eventClick: info => {
+          const e = info.event;
+          alert(
+            `${e.title}\nAssigned to: ${e.extendedProps.assigned_to}` +
+            (e.extendedProps.notes ? `\nNotes: ${e.extendedProps.notes}` : '')
+          );
+        }
+      });
+
+      calendar.render();
+    });
+  </script>
+</body>
+</html>

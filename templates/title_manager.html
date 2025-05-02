@@ -1,82 +1,103 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Team Member Manager</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Team Member Manager</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
 </head>
 <body>
-        <div class="sidebar">
-            <h2>Menu</h2>
-            <a href="/">Home</a>
-            <a href="/tasks">Task Manager</a>
-            <a href="/titles">Team Member Manager</a>
-            <a href="/groups">Group Chats</a>
-            <a href="/settings">Settings</a>
-            <a href="/logout">Logout</a>
-        </div>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="/">Home</a>
+    <a href="/tasks">Task Manager</a>
+    <a href="/titles">Team Member Manager</a>
+    <a href="/calendar">Calendar</a>
+    <a href="/overdue">Overdue Tasks</a>
+    <a href="/groups">Group Chats</a>
+    <a href="/settings">Settings</a>
+    <a href="/logout">Logout</a>
+  </div>
 
-        <div class="main-content">
-            <div class="container">
-                <h1>Team Member Manager</h1>
+  <div class="main-content">
+    <div class="container">
+      <h1>Team Member Manager</h1>
 
-                <!-- Title Creation Form -->
-                <form method="post" action="{{ url_for('title_manager') }}" style="margin-bottom: 20px;">
-                    <label for="new_title">Create New Title:</label>
-                    <input type="text" name="new_title" required placeholder="e.g., Lead Teacher">
-                    <button type="submit">Add Title</button>
-                </form>
+      <!-- Untitled Members -->
+      {% if categorized['Untitled'] %}
+        <h2>Untitled</h2>
+        <ul>
+          {% for user in categorized['Untitled'] %}
+            <li>
+              <strong>{{ user.display_name }}</strong><br/>
+              <!-- ADD form -->
+              <form method="post" action="{{ url_for('update_titles') }}" class="inline-form">
+                <label>Add title:</label>
+                <select name="add_title_{{ user.username }}">
+                  <option value="">-- Select --</option>
+                  {% for t in all_titles %}
+                    <option value="{{ t }}">{{ t }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit">Save</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
 
-                {% if categorized['Untitled'] %}
-                    <h2>Untitled</h2>
-                    <ul>
-                        {% for user in categorized['Untitled'] %}
-                            <li>
-                                <strong>{{ user.display_name }}</strong><br>
-                                Current Titles: None<br>
-                                <form method="post" action="{{ url_for('update_titles') }}">
-                                    <label for="titles_{{ user.username }}">Assign Title:</label>
-                                    <select name="titles_{{ user.username }}">
-                                        <option value="">-- Select Title --</option>
-                                        {% for t in all_titles %}
-                                            <option value="{{ t }}">{{ t }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <button type="submit">Save</button>
-                                </form>
-                                <a href="#">View Profile (coming soon)</a>
-                            </li>
-                        {% endfor %}
-                    </ul>
-                {% endif %}
+      <!-- Members by Title -->
+      {% for title, group in categorized.items() if title != 'Untitled' %}
+        <h2>{{ title }}</h2>
+        <ul>
+          {% for user in group %}
+            <li>
+              <strong>{{ user.display_name }}</strong><br/>
 
-                {% for title, users in categorized.items() %}
-                    {% if title != 'Untitled' %}
-                        <h2>{{ title }}</h2>
-                        <ul>
-                            {% for user in users %}
-                                <li>
-                                    <strong>{{ user.display_name }}</strong><br>
-                                    Current Titles: {{ user.titles | join(', ') if user.titles else 'None' }}<br>
-                                    <form method="post" action="{{ url_for('update_titles') }}">
-                                        <label for="titles_{{ user.username }}">Assign Title:</label>
-                                        <select name="titles_{{ user.username }}">
-                                            <option value="">-- Select Title --</option>
-                                            {% for t in all_titles %}
-                                                <option value="{{ t }}" {% if t in user.titles %}selected{% endif %}>{{ t }}</option>
-                                            {% endfor %}
-                                        </select>
-                                        <button type="submit">Save</button>
-                                    </form>
-                                    <a href="#">View Profile (coming soon)</a>
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    {% endif %}
-                {% endfor %}
+              <!-- current titles with REMOVE buttons -->
+              <small>Current Titles:</small>
+              {% for t in user.titles %}
+                <span class="title-badge">
+                  {{ t }}
+                  <form method="post"
+                        action="{{ url_for('update_titles') }}"
+                        class="remove-form"
+                        style="display:inline">
+                    <input type="hidden" name="remove_title_{{ user.username }}" value="{{ t }}"/>
+                    <button type="submit" class="remove-btn">remove</button>
+                  </form>
+                </span>
+              {% endfor %}
 
-                <a href="/">Back to Home</a>
-            </div>
-        </div>
+              <!-- ADD form -->
+              <form method="post" action="{{ url_for('update_titles') }}" class="inline-form" style="margin-top:4px">
+                <label>Add title:</label>
+                <select name="add_title_{{ user.username }}">
+                  <option value="">-- Select --</option>
+                  {% for t in all_titles if t not in user.titles %}
+                    <option value="{{ t }}">{{ t }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit">Save</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endfor %}
+
+      <!-- Create New Title moved here -->
+      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+        <form method="post" action="{{ url_for('title_manager') }}">
+          <label for="new_title">Create New Title:</label>
+          <input type="text" name="new_title" id="new_title" required placeholder="e.g., Lead Teacher"/>
+          <button type="submit">Add Title</button>
+        </form>
+      </div>
+
+      <p style="margin-top: 20px;">
+        <a href="/">Back to Home</a>
+      </p>
     </div>
+  </div>
 </body>
 </html>

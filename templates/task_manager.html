@@ -5,16 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Task Manager</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.6/main.min.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.6/main.min.js"></script>
+
 </head>
 <body>
   <div class="sidebar">
     <h2>Menu</h2>
     <a href="/">Home</a>
-    <a href="/tasks">Task Manager</a>
-    <a href="/titles">Team Member Manager</a>
-    <a href="/groups">Group Chats</a>
-    <a href="/settings">Settings</a>
-    <a href="/logout">Logout</a>
+        <a href="/tasks">Task Manager</a>
+        <a href="/titles">Team Member Manager</a>
+        <a href="/calendar">Calendar</a>
+        <a href="/overdue">Overdue Tasks</a>
+        <a href="/groups">Group Chats</a>
+        <a href="/settings">Settings</a>
+        <a href="/logout">Logout</a>
   </div>
 
   <div class="main-content">
@@ -63,26 +68,44 @@
 
       <div class="container">
         <h2>Create New Task</h2>
-        <form class="add-form" action="/add" method="post">
-          <input type="text" name="task" placeholder="New task" required>
+   <!-- inside your “Create New Task” form -->
+<form class="add-form" action="/add" method="post">
+    <label for="task">Task:</label>
+    <input type="text" name="task" placeholder="New task" required/>
+    <label for="priority">Priority:</label>
+    <select name="priority">
+      <option value="Low">Low</option>
+      <option value="Medium" selected>Medium</option>
+      <option value="High">High</option>
+    </select>
+    <label for="assigned_to">Assign To:</label>
+    <select name="assigned_to">
+      <option value="">-- Unassigned --</option>
+      {% for user in assignable_users %}
+        <option value="{{ user.username }}">{{ user.display_name }}</option>
+      {% endfor %}
+    </select>
 
-          <select name="priority">
-            <option value="Low">Low</option>
-            <option value="Medium" selected>Medium</option>
-            <option value="High">High</option>
-          </select>
+    <!-- due date -->
+    <label for="due_date">Due Date:</label>
+    <input type="date" name="due_date" id="due_date"/>
 
-          <select name="assigned_to">
-            <option value="">-- Unassigned --</option>
-            {% for user in assignable_users %}
-              <option value="{{ user.username }}">{{ user.display_name }}</option>
-            {% endfor %}
-          </select>
+    <!-- due time (optional) -->
+    <label for="due_time">Time (optional):</label>
+    <input type="time" name="due_time" id="due_time"/>
 
+    <!-- repeat weekly, centered -->
+    <div class="recurring">
+      <label>
+        <input type="checkbox" name="recurring" value="weekly">
+        Repeat weekly
+      </label>
+    </div>
 
-          <input type="date" name="due">
-          <textarea name="notes" placeholder="Optional notes"></textarea>
-          <button type="submit">Add Task</button>
+    <textarea name="notes" placeholder="Optional notes"></textarea>
+    <button type="submit">Add Task</button>
+  </form>
+
         </form>
       </div>
     {% else %}
