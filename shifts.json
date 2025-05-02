@@ -1,0 +1,16 @@
+[
+  {
+    "date": "2025-05-05",
+    "start_time": "08:00",
+    "end_time": "17:00",
+    "assigned_to": "nick",
+    "notes": "Admin times"
+  },
+  {
+    "date": "2025-05-05",
+    "start_time": "17:00",
+    "end_time": "21:00",
+    "assigned_to": "liz",
+    "notes": "Wrap up Supervisor"
+  }
+]

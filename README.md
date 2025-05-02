@@ -43,3 +43,9 @@ pip install flask werkzeug
 python app.py
 6.Open your browser and go to:
 http://localhost:5000
+
+Add feature list:
+Different titles for members
+Group chats or "boards" for certain groups or titles
+Turn off/on scheduling systems
+Reoccuring tasks

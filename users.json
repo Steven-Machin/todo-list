@@ -8,5 +8,10 @@
     "username": "liz",
     "password": "scrypt:32768:8:1$sTdTzV6J7ZIz1VnY$ebc2db149ad2f5c4e369306d07d3671adcd259aa534bf24c128e758a4ee49bdde7b23c3a4e3b7315f7213618529e8f4fe6958ece6d0ac0237dedb4748460b439",
     "role": "member"
+  },
+  {
+    "username": "nick",
+    "password": "scrypt:32768:8:1$TeFLD4Q5ZUPDwi7j$178c49172ac2c57e61f16d8d7df86dc104f834a67cd5afe5641b7e4195abee20f79824b07799743bd9f044686fdcd5bc0c1bc48b1801f81adf0b6fe4d7ea7105",
+    "role": "member"
   }
 ]
