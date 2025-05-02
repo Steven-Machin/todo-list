@@ -1,16 +1,5 @@
 [
   {
-    "text": "Email member",
-    "done": false,
-    "priority": "High",
-    "assigned_to": "Liz",
-    "due": "2025-05-07",
-    "notes": "",
-    "created_by": "steven",
-    "created_at": "2025-05-02T14:35",
-    "overdue": false
-  },
-  {
     "text": "Supervisor wrap up",
     "done": false,
     "priority": "Low",
@@ -18,6 +7,17 @@
     "due": "2025-05-05",
     "notes": "Supervisor group chat follow up",
     "created_by": "steven",
-    "created_at": "2025-05-02T14:35"
+    "created_at": "2025-05-02T14:35",
+    "overdue": false
+  },
+  {
+    "text": "Update Shift Board",
+    "done": false,
+    "priority": "High",
+    "assigned_to": "Liz",
+    "due": "2025-05-09",
+    "notes": "Update all shifts to shift board",
+    "created_by": "steven",
+    "created_at": "2025-05-02T15:34"
   }
 ]

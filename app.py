@@ -10,6 +10,7 @@ app.secret_key = "manager-task-secret"
 TASKS_FILE = "tasks.json"
 USERS_FILE = "users.json"
 SHIFTS_FILE = "shifts.json"
+TITLES_FILE = "titles.json"
 
 def load_tasks():
     if os.path.exists(TASKS_FILE):
@@ -70,6 +71,16 @@ def save_shifts(shifts):
         json.dump(shifts, file, indent=2)
 
 tasks = load_tasks()
+
+def load_titles():
+    if os.path.exists(TITLES_FILE):
+        with open(TITLES_FILE, "r") as file:
+            return json.load(file)
+    return []
+
+def save_titles(titles):
+    with open(TITLES_FILE, "w") as file:
+        json.dump(titles, file, indent=2)
 
 @app.route("/")
 @login_required
@@ -374,13 +385,34 @@ def team_member_manager():
     users = load_users()
     return render_template("team_manager.html", users=users)
 
-@app.route("/titles")
+@app.route("/titles", methods=["GET", "POST"])
 @login_required
 def title_manager():
     if session.get("role") != "manager":
         return redirect("/")
+
     users = load_users()
-    return render_template("title_manager.html", users=users)
+    titles = load_titles()
+
+    # Handle new title creation
+    if request.method == "POST":
+        new_title = request.form.get("new_title", "").strip()
+        if new_title and new_title not in titles:
+            titles.append(new_title)
+            save_titles(titles)
+            flash(f"Title '{new_title}' added.")
+
+    # Categorize users by titles
+    categorized = {"Untitled": []}
+    for user in users:
+        user["display_name"] = user["username"].capitalize()
+        if user.get("titles"):
+            for t in user["titles"]:
+                categorized.setdefault(t, []).append(user)
+        else:
+            categorized["Untitled"].append(user)
+
+    return render_template("title_manager.html", categorized=categorized, all_titles=titles)
 
 
 @app.route("/titles/update", methods=["POST"])
