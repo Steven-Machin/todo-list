@@ -56,6 +56,30 @@
           </li>
         {% endfor %}
       </ul>
+
+      <div class="container">
+        <h2>Create New Task</h2>
+        <form class="add-form" action="/add" method="post">
+          <input type="text" name="task" placeholder="New task" required>
+
+          <select name="priority">
+            <option value="Low">Low</option>
+            <option value="Medium" selected>Medium</option>
+            <option value="High">High</option>
+          </select>
+
+          <select name="assigned_to">
+            <option value="">-- Unassigned --</option>
+            {% for user in assignable_users %}
+              <option value="{{ user }}">{{ user }}</option>
+            {% endfor %}
+          </select>
+
+          <input type="date" name="due">
+          <textarea name="notes" placeholder="Optional notes"></textarea>
+          <button type="submit">Add Task</button>
+        </form>
+      </div>
     {% else %}
       <p>You do not have access to this page.</p>
     {% endif %}

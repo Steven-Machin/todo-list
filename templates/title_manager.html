@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Title Manager</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="/">Home</a>
+    <a href="/tasks">Task Manager</a>
+    <a href="/titles">Title Manager</a>
+    <a href="/groups">Group Chats</a>
+    <a href="/settings">Settings</a>
+    <a href="/logout">Logout</a>
+  </div>
+
+  <div class="main-content">
+    <h1>Title Manager</h1>
+
+    {% if role != 'manager' %}
+      <div class="container">
+        <h2>Current Titles</h2>
+        <ul>
+          {% for title in titles %}
+            <li>
+              {{ title }}
+              <form style="display:inline;" method="post" action="/titles/remove">
+                <input type="hidden" name="title" value="{{ title }}">
+                <button type="submit">Remove</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+
+        <h2>Add New Title</h2>
+        <form method="post" action="/titles/add">
+          <input type="text" name="title" placeholder="Enter new title" required>
+          <button type="submit">Add Title</button>
+        </form>
+
+        <h2>Assign Titles to Users</h2>
+        <form method="post" action="/titles/assign">
+          <label for="user">User:</label>
+          <select name="user">
+            {% for user in users %}
+              <option value="{{ user.username }}">{{ user.username }}</option>
+            {% endfor %}
+          </select>
+
+          <label for="title">Title:</label>
+          <select name="title">
+            {% for title in titles %}
+              <option value="{{ title }}">{{ title }}</option>
+            {% endfor %}
+          </select>
+
+          <button type="submit">Assign Title</button>
+        </form>
+      </div>
+    {% else %}
+      <p>You do not have access to this page.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

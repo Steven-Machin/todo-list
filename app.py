@@ -139,14 +139,21 @@ def index():
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
-        username = request.form["username"].strip().lower()
+        raw_username = request.form["username"].strip()
+        username_lower = raw_username.lower()
+        username_title = raw_username.title()
         password = request.form["password"]
         users = load_users()
-        if any(u["username"] == username for u in users):
+        if any(u["username"] == username_lower for u in users):
             flash("Username already exists.")
             return redirect(url_for("signup"))
         hashed = generate_password_hash(password)
-        users.append({"username": username, "password": hashed, "role": "member"})
+        users.append({
+            "username": username_lower,
+            "display_name": username_title,
+            "password": hashed,
+            "role": "member"
+        })
         save_users(users)
         flash("Account created. Please log in.")
         return redirect(url_for("login"))
@@ -185,11 +192,15 @@ def add():
     created_at = datetime.now().strftime("%Y-%m-%dT%H:%M")
     role = session["role"]
     username = session["username"]
+    users = load_users()
 
     if role == "manager":
-        assigned_to = request.form.get("assigned_to", "").strip().lower()
+        assigned_username = request.form.get("assigned_to", "").strip().lower()
+        assigned_user = next((u for u in users if u["username"] == assigned_username), None)
+        assigned_to = assigned_user["display_name"] if assigned_user and "display_name" in assigned_user else assigned_username.title()
     else:
-        assigned_to = username
+        assigned_user = next((u for u in users if u["username"] == username), None)
+        assigned_to = assigned_user["display_name"] if assigned_user and "display_name" in assigned_user else username.title()
 
     if text:
         task = {
@@ -318,9 +329,8 @@ def tasks_page():
     today = datetime.today().date()
 
     users = load_users()
-    assignable_users = sorted([u["username"] for u in users if u.get("role") != "manager"])
+    assignable_users = sorted([u["username"].capitalize() for u in users if u.get("role") != "manager"])
 
-    # Overdue calculation
     for task in tasks:
         if "due" in task and task["due"]:
             try:
@@ -331,7 +341,6 @@ def tasks_page():
         else:
             task["overdue"] = False
 
-    # Role-based filtering
     visible_tasks = tasks if role == "manager" else [
         t for t in tasks if t.get("assigned_to", "").lower() == username.lower()
     ]
@@ -345,9 +354,49 @@ def tasks_page():
         "task_manager.html",
         tasks=sorted_filtered_tasks,
         role=role,
-        assignees=[t["assigned_to"] for t in tasks if "assigned_to" in t],
-        assignee_filter=assignee_filter
+        assignees=[t["assigned_to"].capitalize() for t in tasks if "assigned_to" in t],
+        assignee_filter=assignee_filter,
+        assignable_users=assignable_users
     )
+
+@app.route("/groups")
+@login_required
+def group_chat_manager():
+    if session.get("role") != "manager":
+        return redirect("/")
+    return render_template("group_chat_manager.html")
+
+@app.route("/members")
+@login_required
+def team_member_manager():
+    if session.get("role") != "manager":
+        return redirect("/")
+    users = load_users()
+    return render_template("team_manager.html", users=users)
+
+@app.route("/titles")
+@login_required
+def title_manager():
+    if session.get("role") != "manager":
+        return redirect("/")
+    users = load_users()
+    return render_template("title_manager.html", users=users)
+
+
+@app.route("/titles/update", methods=["POST"])
+@login_required
+def update_titles():
+    if session.get("role") != "manager":
+        return redirect("/")
+    users = load_users()
+    for user in users:
+        form_key = f"titles_{user['username']}"
+        if form_key in request.form:
+            raw_titles = request.form[form_key].split(',')
+            user["titles"] = [title.strip() for title in raw_titles if title.strip()]
+    save_users(users)
+    flash("Titles updated.")
+    return redirect(url_for("title_manager"))
 
 
 
