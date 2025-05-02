@@ -308,6 +308,48 @@ def my_shifts():
     user_shifts = [s for s in shifts if s["assigned_to"].lower() == username.lower()]
     return render_template("my_shifts.html", shifts=user_shifts)
 
+@app.route("/tasks")
+@login_required
+def tasks_page():
+    username = session["username"]
+    role = session.get("role", "member")
+    assignee_filter = request.args.get("assignee", "All")
+    sort_by = request.args.get("sort", "due")
+    today = datetime.today().date()
+
+    users = load_users()
+    assignable_users = sorted([u["username"] for u in users if u.get("role") != "manager"])
+
+    # Overdue calculation
+    for task in tasks:
+        if "due" in task and task["due"]:
+            try:
+                due_date = datetime.strptime(task["due"], "%Y-%m-%d").date()
+                task["overdue"] = not task.get("done") and due_date < today
+            except ValueError:
+                task["overdue"] = False
+        else:
+            task["overdue"] = False
+
+    # Role-based filtering
+    visible_tasks = tasks if role == "manager" else [
+        t for t in tasks if t.get("assigned_to", "").lower() == username.lower()
+    ]
+    filtered_tasks = [
+        t for t in visible_tasks
+        if assignee_filter == "All" or t.get("assigned_to") == assignee_filter
+    ]
+    sorted_filtered_tasks = sort_tasks(filtered_tasks, key=sort_by)
+
+    return render_template(
+        "task_manager.html",
+        tasks=sorted_filtered_tasks,
+        role=role,
+        assignees=[t["assigned_to"] for t in tasks if "assigned_to" in t],
+        assignee_filter=assignee_filter
+    )
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)

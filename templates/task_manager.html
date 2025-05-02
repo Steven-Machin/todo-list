@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Manager</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="/">Home</a>
+    <a href="/tasks">Task Manager</a>
+    <a href="/titles">Title Manager</a>
+    <a href="/groups">Group Chats</a>
+    <a href="/settings">Settings</a>
+    <a href="/logout">Logout</a>
+  </div>
+
+  <div class="main-content">
+    <h1>Task Manager</h1>
+
+    {% if role == 'manager' %}
+      <form class="filter-form" method="get" action="/tasks">
+        <label for="assignee">Filter by assignee:</label>
+        <select name="assignee">
+          <option value="All" {% if assignee_filter == 'All' %}selected{% endif %}>All</option>
+          {% for name in assignees %}
+            <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Apply</button>
+      </form>
+
+      <ul class="task-list">
+        {% for task in tasks %}
+          <li class="task-item {% if task.overdue %}overdue{% endif %}">
+            <div class="task-header">
+              <span class="task-text {% if task.done %}done{% endif %}">{{ loop.index }}. {{ task.text }}</span>
+            </div>
+            <div class="task-meta">
+              <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
+              <span class="assigned">Assigned to: {{ task.assigned_to }}</span>
+              {% if task.due %}<span class="due">Due: {{ task.due }}</span>{% endif %}
+              {% if task.created_at %}<span class="created">Created: {{ task.created_at }}</span>{% endif %}
+            </div>
+            {% if task.notes %}
+              <div class="task-notes">
+                <strong>Notes:</strong> {{ task.notes }}
+              </div>
+            {% endif %}
+            <div class="task-actions">
+              <a href="/edit/{{ loop.index0 }}">Edit</a>
+              <a href="/remove/{{ loop.index0 }}">Remove</a>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>You do not have access to this page.</p>
+    {% endif %}
+  </div>
+</body>
+</html>
