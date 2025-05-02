@@ -16,6 +16,19 @@
     <a href="{{ url_for('my_shifts') }}">See Shifts</a>
 {% endif %}
 
+{% if role == 'member' and next_shift %}
+    <div class="next-shift-banner">
+        <strong>Your next shift:</strong>
+        {{ next_shift.date }} from {{ next_shift.start_time }} to {{ next_shift.end_time }}
+        {% if next_shift.notes %} — {{ next_shift.notes }}{% endif %}
+    </div>
+{% elif role == 'member' %}
+    <div class="next-shift-banner">
+        <strong>You have no upcoming shifts scheduled.</strong>
+    </div>
+{% endif %}
+
+
 
         <div style="text-align: right;">
             <a href="{{ url_for('logout') }}">Logout</a>

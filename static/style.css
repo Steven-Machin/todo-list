@@ -2,10 +2,13 @@ body {
     font-family: 'Segoe UI', Tahoma, sans-serif;
     background: #eef4f9;
     margin: 0;
-    padding: 40px 20px;
+    padding: 20px;
     display: flex;
     justify-content: center;
+    min-height: 100vh;
+    box-sizing: border-box;
 }
+
 
 .container {
     background: #fff;
@@ -14,7 +17,9 @@ body {
     box-shadow: 0 6px 18px rgba(0,0,0,0.08);
     width: 100%;
     max-width: 720px;
+    box-sizing: border-box;
 }
+
 
 h1 {
     text-align: center;
@@ -202,4 +207,90 @@ textarea {
     border-left: 4px solid #007acc;
     border-radius: 6px;
     font-size: 0.95rem;
+}
+
+.top-nav {
+    display: flex;
+    justify-content: flex-end;
+    gap: 20px;
+    margin-bottom: 15px;
+}
+.top-nav a {
+    color: #5b5b5b;
+    text-decoration: none;
+    font-weight: 500;
+}
+.top-nav a:hover {
+    text-decoration: underline;
+}
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.shift-list {
+    list-style: none;
+    padding-left: 0;
+}
+.shift-list li {
+    padding: 10px;
+    border-bottom: 1px solid #ddd;
+}
+form label {
+    display: block;
+    margin-top: 10px;
+}
+form input, form select, form textarea {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+}
+form button {
+    margin-top: 15px;
+    padding: 10px 20px;
+    background-color: #007acc;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+form button:hover {
+    background-color: #005ea3;
+}
+
+@media (max-width: 600px) {
+    .filter-form,
+    .add-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filter-form select,
+    .add-form input,
+    .add-form select,
+    .add-form button,
+    .add-form textarea {
+        width: 100%;
+        font-size: 1rem;
+    }
+
+    .top-nav {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+    }
+
+    .summary-bar {
+        font-size: 0.95rem;
+        padding: 8px;
+    }
+
+    .task-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .task-header {
+        flex-wrap: wrap;
+    }
 }

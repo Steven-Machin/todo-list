@@ -1,4 +1,3 @@
-<!doctype html>
 <html>
 <head>
     <title>My Shifts</title>
@@ -6,9 +5,12 @@
 </head>
 <body>
     <div class="container">
-        <h1>My Upcoming Shifts</h1>
+        <div class="top-nav">
+            <a href="/">Back to Tasks</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
 
-        <a href="/">Back to Tasks</a>
+        <h1>My Upcoming Shifts</h1>
 
         {% if shifts %}
             <ul class="shift-list">
@@ -21,7 +23,7 @@
                 {% endfor %}
             </ul>
         {% else %}
-            <p>You have no upcoming shifts.</p>
+            <p>You have no upcoming shifts scheduled.</p>
         {% endif %}
     </div>
 </body>

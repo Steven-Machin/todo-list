@@ -6,6 +6,12 @@
 </head>
 <body>
     <div class="container">
+        <div class="top-nav">
+            {% if role == 'manager' %}<a href="{{ url_for('view_shifts') }}">Manage Shifts</a>{% endif %}
+            <a href="/">Back to Tasks</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+
         <h1>Assign New Shift</h1>
 
         <form action="{{ url_for('add_shift') }}" method="post">
@@ -30,7 +36,6 @@
             <textarea name="notes" placeholder="Shift details or special notes..."></textarea>
 
             <button type="submit">Add Shift</button>
-            <a href="{{ url_for('view_shifts') }}">Cancel</a>
         </form>
     </div>
 </body>

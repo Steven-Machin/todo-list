@@ -106,6 +106,20 @@ def index():
     completed_tasks = len([t for t in filtered_tasks if t.get("done")])
     remaining_tasks = total_tasks - completed_tasks
 
+    if role == "member":
+        all_shifts = load_shifts()
+        upcoming = [
+            s for s in all_shifts
+            if s["assigned_to"].lower() == username.lower()
+            and datetime.strptime(s["date"], "%Y-%m-%d").date() >= today
+    ]
+        upcoming.sort(key=lambda s: s["date"])
+        next_shift = upcoming[0] if upcoming else None
+    else:
+        next_shift = None
+
+
+
     return render_template(
         "index.html",
         tasks=sorted_filtered_tasks,
@@ -119,6 +133,7 @@ def index():
         role=role,
         current_user=username,
         assignable_users=assignable_users
+        , next_shift=next_shift,
     )
 
 @app.route("/signup", methods=["GET", "POST"])
