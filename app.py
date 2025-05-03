@@ -146,6 +146,11 @@ def index():
         assignable_users=assignable_users
         , next_shift=next_shift,
     )
+@app.template_filter('format_datetime')
+def format_datetime(value):
+    # parse the ISO string, then format
+    dt = datetime.strptime(value, "%Y-%m-%dT%H:%M")
+    return dt.strftime("%b %d, %Y %I:%M %p")  # e.g. "May 02, 2025 08:35 PM"
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
@@ -233,6 +238,8 @@ def add():
         flash("Task added successfully.")
     return redirect("/")
 
+from datetime import datetime, timedelta
+
 @app.route("/toggle/<int:task_id>", methods=["POST"])
 @login_required
 def toggle(task_id):
@@ -241,16 +248,18 @@ def toggle(task_id):
 
     if 0 <= task_id < len(tasks):
         t = tasks[task_id]
-        # only allowed actors
-        if role == "manager" or t.get("assigned_to","").lower() == username.lower():
+        if role == "manager" or t.get("assigned_to", "").lower() == username.lower():
             t["done"] = not t["done"]
 
-            # record when they flipped it
             if t["done"]:
-                t["completed_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M")
-                # if this was a weekly task, schedule next week
+                # 12-hour clock, e.g. "2025-05-02T02:34 PM"
+                now = datetime.now().strftime("%Y-%m-%dT%I:%M %p")
+                t["completed_at"] = now
+
+                # if weekly recurring, schedule next week
                 if t.get("recurring") == "weekly" and t.get("due_date"):
-                    dd = datetime.strptime(t["due_date"], "%Y-%m-%d").date() + timedelta(weeks=1)
+                    dd = (datetime.strptime(t["due_date"], "%Y-%m-%d").date()
+                          + timedelta(weeks=1))
                     new = t.copy()
                     new.update({
                         "done": False,
@@ -263,7 +272,10 @@ def toggle(task_id):
 
             save_tasks(tasks)
             flash("Task status updated.")
-    return redirect("/")
+
+    return redirect(url_for("tasks_page"))
+
+
 
 
 @app.route("/remove/<int:task_id>")
@@ -360,43 +372,78 @@ def my_shifts():
 def tasks_page():
     username = session["username"]
     role     = session.get("role", "member")
-    sort_by  = request.args.get("sort",  "due")
+    sort_by  = request.args.get("sort", "due_asc")
     today    = datetime.today().date()
 
     users = load_users()
 
-    # define your eligible titles (lowercase for comparison)
-    eligible = {
-        "assistant manager", "family swim supervisor", "lead supervisor",
-        "swim administrator", "programming supervisor", "supervisor"
-    }
-
-    # only managers get all tasks, others only their own
-    visible_tasks = tasks if role == "manager" else [
-        t for t in tasks if t.get("assigned_to","").lower() == username.lower()
+    # 1) Pick only the tasks this user should see
+    visible = tasks if role == "manager" else [
+        t for t in tasks
+        if t.get("assigned_to","").lower() == username.lower()
     ]
 
-    # sort/filter tasks as before...
-    sorted_tasks = sort_tasks(visible_tasks, key=sort_by)
+    # 2) If “completed” was selected, show only done tasks
+    if sort_by == "completed":
+        visible = [t for t in visible if t.get("done")]
 
-    # pass full user objects whose titles intersect eligible set
+    # 3) Sort according to sort_by
+    def sort_key(t):
+        # due date, fallback far future
+        dd = t.get("due") or "9999-12-31"
+        pd = {"High":0,"Medium":1,"Low":2}[t.get("priority","Medium")]
+        return {
+            "due_asc":    datetime.strptime(dd, "%Y-%m-%d"),
+            "due_desc":  -datetime.strptime(dd, "%Y-%m-%d").timestamp(),
+            "priority_hl": pd,
+            "priority_lh": -pd,
+            "completed": datetime.strptime(t.get("completed_at","9999-12-31T00:00"), "%Y-%m-%dT%H:%M")
+        }[sort_by]
+
+    visible.sort(key=sort_key)
+
+    # 4) Figure out who we can assign new tasks to
+    eligible = {
+        "assistant manager","family swim supervisor","lead supervisor",
+        "swim administrator","programming supervisor","supervisor"
+    }
     if role == "manager":
         assignable_users = [
             u for u in users
-            if u.get("role") != "manager"
-            and any(title.lower() in eligible for title in u.get("titles", []))
+            if u.get("role")!="manager"
+            and any(tlt.lower() in eligible for tlt in u.get("titles",[]))
         ]
     else:
         assignable_users = []
 
     return render_template(
-        "task_manager.html",
-        tasks=sorted_tasks,
-        role=role,
-        sort_by=sort_by,
-        assignable_users=assignable_users
+      "task_manager.html",
+      tasks=visible,
+      role=role,
+      sort_by=sort_by,
+      assignable_users=assignable_users
     )
 
+@app.route("/tasks/create")
+@login_required
+def create_task_page():
+    # only managers can create
+    if session.get("role") != "manager":
+        return redirect(url_for("tasks_page"))
+
+    users = load_users()
+    eligible = {
+      "assistant manager","family swim supervisor","lead supervisor",
+      "swim administrator","programming supervisor","supervisor"
+    }
+    assignable = [
+      u for u in users
+      if u.get("role")!="manager"
+         and any(t.lower() in eligible for t in u.get("titles",[]))
+    ]
+
+    return render_template("create_task.html",
+                       assignable_users=assignable)
 
 @app.route("/groups")
 @login_required

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Create New Task – To Do App</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="/">Home</a>
+        <a href="/tasks">Task Manager</a>
+        <a href="/titles">Team Member Manager</a>
+        <a href="/calendar">Calendar</a>
+        <a href="/overdue">Overdue Tasks</a>
+        <a href="/groups">Group Chats</a>
+        <a href="/settings">Settings</a>
+        <a href="/logout">Logout</a>
+  </div>
+  <div class="main-content">
+    <h1>Create New Task</h1>
+
+    <form class="add-form" action="{{ url_for('add') }}" method="post">
+      <input type="text" name="task" placeholder="Task description" required>
+
+      <select name="priority">
+        <option value="Low">Low</option>
+        <option value="Medium" selected>Medium</option>
+        <option value="High">High</option>
+      </select>
+
+      <select name="assigned_to">
+        <option value="">-- Unassigned --</option>
+        {% for u in assignable_users %}
+          <option value="{{ u.username }}">{{ u.display_name }}</option>
+        {% endfor %}
+      </select>
+
+      <input type="date" name="due_date">
+      <input type="time" name="due_time" placeholder="Optional time">
+
+      <div class="recurring">
+        <label>
+          <input type="checkbox" name="recurring" value="weekly">
+          Repeat weekly
+        </label>
+      </div>
+
+      <textarea name="notes" placeholder="Optional notes"></textarea>
+      <button type="submit">Add Task</button>
+    </form>
+
+    <p style="text-align:center; margin-top:1em;">
+      <a href="{{ url_for('tasks_page') }}">← Back to Task Manager</a>
+    </p>
+  </div>
+</body>
+</html>
