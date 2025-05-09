@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Group Chats</title>
+  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Menu</h2>
+        <a href="/">Home</a>
+        <a href="/tasks">Task Manager</a>
+        <a href="/titles">Team Member Manager</a>
+        <a href="/calendar">Calendar</a>
+        <a href="/overdue">Overdue Tasks</a>
+        <a href="/groups">Group Chats</a>
+        <a href="/settings">Settings</a>
+        <a href="/logout">Logout</a>
+      </div>
+  <div class="main-content container">
+    <h1>Group Chats</h1>
+    <ul>
+      {% for g in groups %}
+        <li>
+          <a href="{{ url_for('view_group',group_id=g.id) }}">{{ g.name }}</a>
+          &nbsp;<small>(Lead: {{ g.supervisor.capitalize() }})</small>
+        </li>
+      {% endfor %}
+    </ul>
+
+    <h2>Create New Group</h2>
+    <form method="post" action="{{ url_for('add_group') }}">
+      <label>Group name<input name="group_name"></label>
+      <label>Supervisor
+        <select name="supervisor">
+          <option value="">—</option>
+          {% for u in users if u.role!='manager' %}
+            <option value="{{ u.username }}">{{ u.display_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">New Group</button>
+    </form>
+  </div>
+</body>
+</html>

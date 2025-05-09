@@ -1,12 +1,69 @@
-{% extends "base.html" %}
-{% block content %}
-  <h1>Overdue Tasks</h1>
-  <ul>
-    {% for idx, t in overdue %}
-      <li>
-        <strong>{{ t.text }}</strong> (Due {{ t.due }}, Priority {{ t.priority }}, Assigned {{ t.assigned_to }})
-        &nbsp;<a href="{{ url_for('remove', task_id=idx) }}">Remove</a>
-      </li>
-    {% endfor %}
-  </ul>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Overdue Tasks – To Do App</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="{{ url_for('index') }}">Home</a>
+    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('overdue_tasks') }}" class="active">Overdue Tasks</a>
+    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+    <a href="{{ url_for('settings') }}">Settings</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+  </div>
+
+  <div class="main-content">
+    <div class="container">
+      <h1>Overdue Tasks</h1>
+
+      {% if overdue %}
+        <ul class="task-list">
+          {% for idx, task in overdue %}
+            <li class="task-item overdue">
+              <div class="task-header">
+                <span class="task-text">{{ loop.index }}. {{ task.text }}</span>
+              </div>
+              <div class="task-meta">
+                <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
+                <span class="assigned">Assigned to: {{ task.assigned_to }}</span>
+                {% if task.due %}
+                  <span class="due">Due: {{ task.due }}</span>
+                {% elif task.due_date %}
+                  <span class="due">Due: {{ task.due_date }}</span>
+                {% endif %}
+                {% if task.created_at %}
+                  <span class="created">Created: {{ task.created_at.split('T')[0] }}</span>
+                {% endif %}
+              </div>
+              {% if task.notes %}
+                <div class="task-notes">
+                  <strong>Notes:</strong> {{ task.notes }}
+                </div>
+              {% endif %}
+              <div class="task-actions">
+                {% if role=='manager' %}
+                  <a href="{{ url_for('edit', task_id=idx) }}">Edit</a>
+                  <a href="{{ url_for('remove', task_id=idx) }}">Remove</a>
+                {% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-state">No overdue tasks! 🎉</p>
+      {% endif %}
+
+      <p style="text-align:right;">
+        <a href="{{ url_for('tasks_page') }}">← Back to Task Manager</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

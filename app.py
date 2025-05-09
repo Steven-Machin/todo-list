@@ -1,9 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 import json
 import os
+import uuid
 from datetime import datetime
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = "manager-task-secret"
@@ -11,6 +13,13 @@ TASKS_FILE = "tasks.json"
 USERS_FILE = "users.json"
 SHIFTS_FILE = "shifts.json"
 TITLES_FILE = "titles.json"
+GROUPS_FILE      = "group_chats.json"
+GROUP_TASKS_FILE = "group_tasks.json"
+UPLOAD_FOLDER    = "static/uploads"
+ALLOWED_EXTS     = {"png","jpg","jpeg","gif"}
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 def load_tasks():
     if os.path.exists(TASKS_FILE):
@@ -81,6 +90,25 @@ def load_titles():
 def save_titles(titles):
     with open(TITLES_FILE, "w") as file:
         json.dump(titles, file, indent=2)
+
+def allowed_file(fn):
+    return "." in fn and fn.rsplit(".",1)[1].lower() in ALLOWED_EXTS
+
+def load_groups():
+    if os.path.exists(GROUPS_FILE):
+        return json.load(open(GROUPS_FILE))
+    return []
+
+def save_groups(gs):
+    json.dump(gs, open(GROUPS_FILE,"w"), indent=2)
+
+def load_group_tasks():
+    if os.path.exists(GROUP_TASKS_FILE):
+        return json.load(open(GROUP_TASKS_FILE))
+    return {}
+
+def save_group_tasks(gts):
+    json.dump(gts, open(GROUP_TASKS_FILE,"w"), indent=2)
 
 @app.route("/")
 @login_required
@@ -548,16 +576,6 @@ def task_events():
             })
     return jsonify(evts)
 
-@app.route("/overdue")
-@login_required
-def overdue_tasks():
-    today = datetime.today().date()
-    overdue = [
-      (i,t) for i,t in enumerate(load_tasks())
-      if not t.get("done") and t.get("due") and datetime.strptime(t["due"],"%Y-%m-%d").date() < today
-    ]
-    return render_template("overdue.html", overdue=overdue)
-
 @app.route("/settings")
 @login_required
 def settings():
@@ -565,6 +583,165 @@ def settings():
     # if session.get("role") != "manager":
     #     return redirect("/")
     return render_template("settings.html")
+
+@app.route("/overdue")
+@login_required
+def overdue_tasks():
+    username = session["username"]
+    role = session.get("role", "member")
+    today = datetime.today().date()
+
+    all_tasks = load_tasks()
+    # manager sees everything, others only their own
+    visible = all_tasks if role=="manager" else [
+        t for t in all_tasks
+        if t.get("assigned_to","").lower() == username.lower()
+    ]
+
+    # find the overdue ones
+    overdue = []
+    for idx, t in enumerate(visible):
+        due = t.get("due") or t.get("due_date")
+        try:
+            due_date = datetime.strptime(due, "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            continue
+        if not t.get("done") and due_date < today:
+            overdue.append((idx, t))
+
+    return render_template("overdue.html",
+                            overdue=overdue,
+                            role=role)
+
+@app.route("/groups/add", methods=["POST"])
+@login_required
+def add_group():
+    if session.get("role")!="manager":
+        return redirect("/")
+    name = request.form.get("group_name","").strip()
+    sup  = request.form.get("supervisor","").strip().lower()
+    if name and sup:
+        gs = load_groups()
+        new = {
+          "id": str(uuid.uuid4()),
+          "name": name,
+          "supervisor": sup,
+          "members": [sup]
+        }
+        gs.append(new)
+        save_groups(gs)
+        flash(f"Group '{name}' created.")
+    return redirect(url_for("group_chat_manager"))
+
+@app.route("/groups/<group_id>")
+@login_required
+def view_group(group_id):
+    if session.get("role")!="manager":
+        return redirect("/")
+    groups = load_groups()
+    g = next((g for g in groups if g["id"]==group_id), None)
+    if not g:
+        flash("Group not found."); return redirect("/groups")
+
+    # load tasks mapping
+    all_tasks = load_group_tasks().get(group_id, [])
+    users = load_users()
+    # supervisor can add; members can complete
+    return render_template("group_chat.html",
+        group=g, users=users, tasks=all_tasks
+    )
+
+@app.route("/groups/<group_id>/add_member", methods=["POST"])
+@login_required
+def add_group_member(group_id):
+    gs = load_groups()
+    g = next((g for g in gs if g["id"]==group_id), None)
+    if g and session.get("role")=="manager":
+        u = request.form.get("member","").strip().lower()
+        if u and u not in g["members"]:
+            g["members"].append(u)
+            save_groups(gs)
+            flash("Member added.")
+    return redirect(url_for("view_group",group_id=group_id))
+
+@app.route("/groups/<group_id>/remove_member", methods=["POST"])
+@login_required
+def remove_group_member(group_id):
+    gs = load_groups()
+    g = next((g for g in gs if g["id"]==group_id), None)
+    if g and session.get("role")=="manager":
+        u = request.form.get("member","")
+        if u in g["members"] and u!=g["supervisor"]:
+            g["members"].remove(u)
+            save_groups(gs)
+            flash("Member removed.")
+    return redirect(url_for("view_group",group_id=group_id))
+
+@app.route("/groups/<group_id>/add_task", methods=["POST"])
+@login_required
+def add_group_task(group_id):
+    gts = load_group_tasks()
+    gtasks = gts.setdefault(group_id, [])
+    text      = request.form.get("text","").strip()
+    priority  = request.form.get("priority","Medium")
+    due_date  = request.form.get("due_date","").strip()
+    recurring = request.form.get("recurring")=="weekly"
+    notes     = request.form.get("notes","").strip()
+    creator   = session["username"]
+    if text:
+        t = {
+          "text": text,
+          "priority": priority,
+          "due_date": due_date,
+          "recurring": "weekly" if recurring else None,
+          "notes": notes,
+          "done": False,
+          "created_by": creator,
+          "created_at": datetime.now().isoformat(timespec="minutes")
+        }
+        gtasks.append(t)
+        save_group_tasks(gts)
+        flash("Task added.")
+    return redirect(url_for("view_group",group_id=group_id))
+
+@app.route("/groups/<group_id>/toggle_task/<int:idx>", methods=["POST"])
+@login_required
+def toggle_group_task(group_id, idx):
+    gts = load_group_tasks()
+    tasks = gts.get(group_id, [])
+    if 0<=idx<len(tasks):
+        t = tasks[idx]
+        user = session["username"]
+        # only group members may toggle
+        grp = next(g for g in load_groups() if g["id"]==group_id)
+        if user in grp["members"]:
+            t["done"] = not t["done"]
+            now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+            if t["done"]:
+                t["completed_at"] = now
+                t["completed_by"] = user
+                # handle photo upload
+                if "photo" in request.files:
+                    f = request.files["photo"]
+                    if f and allowed_file(f.filename):
+                        fn = secure_filename(f"{uuid.uuid4()}_{f.filename}")
+                        out = os.path.join(app.config["UPLOAD_FOLDER"], fn)
+                        f.save(out)
+                        t["photo"] = fn
+                # schedule next if recurring
+                if t.get("recurring")=="weekly" and t.get("due_date"):
+                    dd = datetime.fromisoformat(t["due_date"]).date()
+                    nxt = dd + timedelta(weeks=1)
+                    new = t.copy()
+                    new.update({k:None for k in ("done","completed_at","completed_by","photo")})
+                    new["due_date"] = nxt.isoformat()
+                    tasks.append(new)
+            else:
+                for k in ("completed_at","completed_by","photo"):
+                    t.pop(k,None)
+            save_group_tasks(gts)
+            flash("Status updated.")
+    return redirect(url_for("view_group",group_id=group_id))
 
 
 if __name__ == "__main__":
