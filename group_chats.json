@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "id": "94bb6df7-00df-4853-89f3-e946f7572f69",
+    "name": "Thursday PM",
+    "supervisor": "nick",
+    "members": [
+      "nick"
+    ]
+  },
+  {
+    "id": "5a87ba1c-1a52-4138-a270-219ab459b4f0",
+    "name": "Sunday AM",
+    "supervisor": "liz",
+    "members": [
+      "liz"
+    ]
+  }
+]

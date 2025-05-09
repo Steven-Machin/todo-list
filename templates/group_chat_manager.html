@@ -1,45 +1,59 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Group Chats</title>
-  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Group Chats – To Do App</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="sidebar">
-        <h2>Menu</h2>
-        <a href="/">Home</a>
-        <a href="/tasks">Task Manager</a>
-        <a href="/titles">Team Member Manager</a>
-        <a href="/calendar">Calendar</a>
-        <a href="/overdue">Overdue Tasks</a>
-        <a href="/groups">Group Chats</a>
-        <a href="/settings">Settings</a>
-        <a href="/logout">Logout</a>
-      </div>
-  <div class="main-content container">
-    <h1>Group Chats</h1>
-    <ul>
-      {% for g in groups %}
-        <li>
-          <a href="{{ url_for('view_group',group_id=g.id) }}">{{ g.name }}</a>
-          &nbsp;<small>(Lead: {{ g.supervisor.capitalize() }})</small>
-        </li>
-      {% endfor %}
-    </ul>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="{{ url_for('index') }}">Home</a>
+    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
+    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+    <a href="{{ url_for('settings') }}">Settings</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+  </div>
 
-    <h2>Create New Group</h2>
-    <form method="post" action="{{ url_for('add_group') }}">
-      <label>Group name<input name="group_name"></label>
-      <label>Supervisor
-        <select name="supervisor">
-          <option value="">—</option>
-          {% for u in users if u.role!='manager' %}
-            <option value="{{ u.username }}">{{ u.display_name }}</option>
+  <div class="main-content">
+    <div class="container">
+      <h1>Group Chats</h1>
+
+      <ul class="group-list">
+        {% for g in groups %}
+          {% set sup = users
+               | selectattr("username","equalto", g.supervisor)
+               | list
+               | first %}
+          <li>
+            <a href="{{ url_for('view_group', group_id=g.id) }}">{{ g.name }}</a>
+            <small>Lead: {{ sup.display_name if sup else g.supervisor.title() }}</small>
+          </li>
+        {% else %}
+          <li class="empty-state">No groups yet.</li>
+        {% endfor %}
+      </ul>
+
+      <h2>Create New Group</h2>
+      <form method="post" action="{{ url_for('add_group') }}" class="add-form">
+        <label for="group_name">Group Name</label>
+        <input type="text" id="group_name" name="group_name" required placeholder="e.g. Lifeguards">
+
+        <label for="supervisor">Supervisor</label>
+        <select id="supervisor" name="supervisor" required>
+          <option value="">-- Select Supervisor --</option>
+          {% for sup in supervisors %}
+            <option value="{{ sup.username }}">{{ sup.display_name }}</option>
           {% endfor %}
         </select>
-      </label>
-      <button type="submit">New Group</button>
-    </form>
+
+        <button type="submit">Create Group</button>
+      </form>
+    </div>
   </div>
 </body>
 </html>

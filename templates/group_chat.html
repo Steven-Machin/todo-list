@@ -1,100 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>{{ group.name }}</title>
-  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+  <title>{{ group.name }} – Group Chat</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="sidebar">
         <h2>Menu</h2>
-        <a href="/">Home</a>
-        <a href="/tasks">Task Manager</a>
-        <a href="/titles">Team Member Manager</a>
-        <a href="/calendar">Calendar</a>
-        <a href="/overdue">Overdue Tasks</a>
-        <a href="/groups">Group Chats</a>
-        <a href="/settings">Settings</a>
-        <a href="/logout">Logout</a>
+        <a href="{{ url_for('index') }}">Home</a>
+        <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+        <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
+        <a href="{{ url_for('calendar_view') }}">Calendar</a>
+        <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
+        <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+        <a href="{{ url_for('settings') }}">Settings</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
       </div>
-  <div class="main-content container">
-    <h1>Group: {{ group.name }}</h1>
-    <p><strong>Lead:</strong> {{ group.supervisor.capitalize() }}</p>
 
-    <h2>Members</h2>
-    <ul>
-      {% for m in group.members %}
-        <li>
-          {{ m.capitalize() }}
-          {% if session.role=='manager' and m!=group.supervisor %}
-            <form style="display:inline" method="post"
-                  action="{{ url_for('remove_group_member',group_id=group.id) }}">
-              <input type="hidden" name="member" value="{{ m }}">
-              <button type="submit">×</button>
-            </form>
-          {% endif %}
-        </li>
-      {% endfor %}
-    </ul>
-    {% if session.role=='manager' %}
-      <form method="post" action="{{ url_for('add_group_member',group_id=group.id) }}">
-        <select name="member">
-          <option value="">— add member —</option>
-          {% for u in users if u.username not in group.members %}
-            <option value="{{ u.username }}">{{ u.display_name }}</option>
+  <div class="main-content">
+    <div class="container">
+      <h1>{{ group.name }}</h1>
+
+      {# Supervisor lookup #}
+      {% set sup = users
+           | selectattr("username","equalto", group.supervisor)
+           | list
+           | first %}
+      <p><em>Supervisor:</em> {{ sup.display_name if sup else "—" }}</p>
+
+      <section class="chat-box">
+        <h2>Chat</h2>
+        <div class="messages">
+          {% for m in messages %}
+            {% set sender = users
+                 | selectattr("username","equalto", m.sender)
+                 | list
+                 | first %}
+            <div class="message">
+              <strong>{{ sender.display_name if sender else m.sender }}</strong>
+              <small>{{ m.timestamp.replace("T"," ") }}</small>
+              <p>{{ m.text }}</p>
+            </div>
+          {% else %}
+            <p class="empty-state">No messages yet.</p>
           {% endfor %}
-        </select>
-        <button type="submit">Add</button>
-      </form>
-    {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('post_group_message', group_id=group.id) }}">
+          <textarea name="message" placeholder="Type a message…" required></textarea>
+          <button type="submit">Send</button>
+        </form>
+      </section>
 
-    <h2>Tasks</h2>
-    <ul class="task-list">
-      {% for t in tasks %}
-        <li class="task-item {% if t.done %}done{% elif t.due_date and t.due_date < now().date().isoformat() %}overdue{% endif %}">
-          <form method="post"
-                action="{{ url_for('toggle_group_task',group_id=group.id,idx=loop.index0) }}"
-                enctype="multipart/form-data">
-            <input type="checkbox" name="done" onchange="this.form.submit()"
-                   {% if t.done %}checked{% endif %}>
-            {{ t.text }}
-            {% if not t.done %}
-              <input type="file" name="photo">
-            {% endif %}
-          </form>
-          <div class="task-meta">
-            <small>Priority: {{ t.priority }}</small>
-            <small>Due: {{ t.due_date or '—' }}</small>
-            {% if t.done %}
-              <small>By: {{ t.completed_by }} @
-                {{ t.completed_at.split('T')[1] }} on
-                {{ t.completed_at.split('T')[0] }}
-              </small>
-            {% endif %}
-          </div>
-          {% if t.notes %}
-            <div class="task-notes">{{ t.notes }}</div>
-          {% endif %}
-          {% if t.photo %}
-            <img src="{{ url_for('static', filename='uploads/'+t.photo) }}"
-                 style="max-width:150px;margin-top:8px;">
-          {% endif %}
-        </li>
-      {% endfor %}
-    </ul>
+      <section class="task-panel">
+        <h2>Weekly Tasks</h2>
+        <ul class="task-list">
+          {% for t in tasks %}
+            <li class="task-item">
+              <form method="post"
+                    action="{{ url_for('toggle_group_task', group_id=group.id, idx=loop.index0) }}"
+                    style="display:inline">
+                <input type="checkbox" onchange="this.form.submit()" {% if t.done %}checked{% endif %}>
+              </form>
+              {{ t.text }} <small>({{ t.priority }})</small>
+              {% if t.completed_at %}
+                <small>— Done {{ t.completed_at.replace("T"," ") }}</small>
+              {% endif %}
+            </li>
+          {% else %}
+            <li class="empty-state">No tasks yet.</li>
+          {% endfor %}
+        </ul>
 
-    {% if session.role=='manager' or session.username==group.supervisor %}
-      <h3>Add Task</h3>
-      <form method="post" action="{{ url_for('add_group_task',group_id=group.id) }}">
-        <input name="text" placeholder="Task text" required>
-        <select name="priority">
-          <option>Low</option><option selected>Medium</option><option>High</option>
-        </select>
-        <input type="date" name="due_date">
-        <label><input type="checkbox" name="recurring"> Repeat weekly</label>
-        <textarea name="notes" placeholder="Optional notes"></textarea>
-        <button type="submit">Add</button>
-      </form>
-    {% endif %}
+        <form method="post" action="{{ url_for('add_group_task', group_id=group.id) }}">
+          <input type="text" name="text" placeholder="New weekly task" required>
+          <select name="priority">
+            <option>Low</option>
+            <option selected>Medium</option>
+            <option>High</option>
+          </select>
+          <textarea name="notes" placeholder="Optional notes…"></textarea>
+          <button type="submit">Add Task</button>
+        </form>
+      </section>
+    </div>
   </div>
 </body>
 </html>
