@@ -54,16 +54,23 @@
 
     <div class="container">
       <h2>Latest Group Chat</h2>
-      {% if latest_group %}
-        <div class="group-preview">
-          <strong>{{ latest_group.name }}</strong><br>
-          {{ latest_group.last_message|truncate(100) }}
-          <a href="/groups/{{ latest_group.id }}">Open Chat</a>
-        </div>
-      {% else %}
-        <p>No recent activity.</p>
-      {% endif %}
-    </div>
+      {% if latest_chats %}
+      <div class="chat-preview container">
+        <ul class="chat-list">
+          {% for msg in latest_chats %}
+            <li>
+              <strong>
+                <a href="{{ url_for('view_group', group_id=msg.group_id) }}">
+                  {{ msg.group_name }}
+                </a> &rsaquo;
+                {{ msg.sender_disp }}
+              </strong>
+              : {{ msg.text }}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
   </section>
 
 {% elif role == 'member' %}

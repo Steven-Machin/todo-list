@@ -1,418 +1,178 @@
-/* ==============================================
-   Global Reset & Layout
-   ============================================== */
-   html, body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
+/* === Reset & Base === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-  body {
-    font-family: 'Segoe UI', Tahoma, sans-serif;
-    background: #eef4f9;
-    display: flex;
-    flex-direction: row;
-    min-height: 100vh;
-  }
+html, body {
+  height: 100%;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: #eef4f9;
+  color: #333;
+}
 
-  /* ==============================================
-     Sidebar
-     ============================================== */
-  .sidebar {
-    background: #ffffff;
-    flex: 0 0 220px;
-    width: 220px;
-    padding: 20px;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
+a {
+  color: #007acc;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
 
-  .sidebar h2 {
-    font-size: 1.2rem;
-    margin-bottom: 10px;
-    color: #333;
-  }
+/* === Layout === */
+body {
+  display: flex;
+  min-height: 100vh;
+}
 
-  .sidebar a {
-    color: #007acc;
-    text-decoration: none;
-    font-weight: 500;
-    margin-bottom: 8px;
-  }
+.sidebar {
+  width: 220px;
+  background: #fff;
+  padding: 20px;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-  .sidebar a:hover {
-    text-decoration: underline;
-  }
+.sidebar h2 {
+  font-size: 1.2rem;
+  margin-bottom: 8px;
+}
 
-  /* ==============================================
-     Main Content
-     ============================================== */
-  .main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    height: 100%;
-    padding: 20px;
-  }
+.main-content {
+  flex: 1;
+  padding: 20px;
+}
 
-  /* Page & Section Headings */
-  h1 {
-    text-align: center;
-    margin: 25px 0;
-    color: #222;
-    font-size: 2rem;
-  }
+.dashboard-grid {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
 
-  /* ==============================================
-     Containers & Cards
-     ============================================== */
-  .container {
-    background: #fff;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-    width: 100%;
-    max-width: 720px;
-    margin: 0 auto;
-  }
+/* === Cards === */
+.card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  flex: 1;
+  min-width: 300px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
 
-  /* ==============================================
-     Flash & Summary Bars
-     ============================================== */
-  .flash {
-    background-color: #e3f7e8;
-    border: 1px solid #6ac68c;
-    color: #2f6636;
-    padding: 12px 16px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-  }
+.card h2 {
+  margin-bottom: 16px;
+  font-size: 1.4rem;
+}
 
-  .summary-bar {
-    font-size: 1rem;
-    text-align: center;
-    margin-bottom: 20px;
-    background: #f1f4f8;
-    padding: 10px;
-    border-radius: 6px;
-  }
+/* === Task List === */
+.task-list {
+  list-style: none;
+  margin-top: 16px;
+}
+.task-item {
+  background: #f6f9fc;
+  border-left: 6px solid transparent;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.task-item.overdue {
+  border-left-color: crimson;
+}
+.task-text {
+  font-weight: 500;
+  font-size: 1.05rem;
+}
+.task-text.done {
+  text-decoration: line-through;
+  color: #777;
+}
+.task-meta {
+  font-size: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #555;
+}
+.priority.low    { color: green; }
+.priority.medium { color: orange; }
+.priority.high   { color: red; }
 
-  /* ==============================================
-     Forms & Filters
-     ============================================== */
-  .filter-form {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-  }
+/* === Forms & Buttons === */
+form {
+  margin: 0;
+}
+button,
+input[type="submit"] {
+  padding: 8px 16px;
+  background: #007acc;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+button:hover {
+  background: #005fa3;
+}
+input, select, textarea {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  width: 100%;
+}
+.filter-form,
+.chat-box form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.filter-form label {
+  white-space: nowrap;
+}
 
-  .filter-form select {
-    padding: 6px 10px;
-    font-size: 1rem;
-  }
+/* === Latest Chats === */
+.latest-chats {
+  list-style: none;
+  padding: 0;
+  margin-top: 12px;
+}
+.latest-chats li {
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+.latest-chats li:last-child {
+  border-bottom: none;
+}
 
-  /* Add-New-Task Form */
-  .add-form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 10px;
-  }
+/* === Calendar Container === */
+.calendar-container {
+  width: 100%;
+  margin: 20px auto;
+}
+#calendar {
+  width: 100%;
+}
 
-  .add-form input[type="text"],
-  .add-form input[type="date"],
-  .add-form select,
-  .add-form input[type="time"] {
-    flex: 1 1 200px;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 1rem;
-  }
-
-  .add-form button {
-    padding: 10px 20px;
-    font-size: 1rem;
-    border: none;
-    border-radius: 6px;
-    background-color: #007acc;
-    color: white;
-    cursor: pointer;
-  }
-
-  .add-form button:hover {
-    background-color: #005fa3;
-  }
-
-  textarea {
-    width: 100%;
-    padding: 10px;
-    font-size: 1rem;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    resize: vertical;
-    min-height: 60px;
-  }
-
-  /* Optional recurring checkbox */
-  .recurring {
-    text-align: center;
-    margin: 10px 0 20px;
-  }
-
-  .recurring label {
-    cursor: pointer;
-    font-size: 0.95rem;
-  }
-
-  /* ==============================================
-     Task List & Items
-     ============================================== */
-  .task-list {
-    list-style: none;
-    padding: 0;
-    margin-bottom: 30px;
-  }
-
-  .task-item {
-    background: #f6f9fc;
-    border-left: 6px solid transparent;
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-
-  .task-item.overdue {
-    border-left-color: crimson;
-    background-color: #ffe3e3;
-  }
-
-  .task-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 10px;
-  }
-
-  .task-text {
-    font-weight: 500;
-    font-size: 1.1rem;
-  }
-
-  .done {
-    text-decoration: line-through;
-    color: #777;
-  }
-
-  .task-meta {
-    font-size: 0.9rem;
-    color: #444;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .task-actions {
-    margin-left: auto;
-  }
-
-  .task-actions a {
-    margin-left: 10px;
-    color: #d80000;
-    text-decoration: none;
-    font-weight: 500;
-  }
-
-  .task-actions a:hover {
-    text-decoration: underline;
-  }
-
-  /* Priority coloring */
-  .priority.low    { color: green;  }
-  .priority.medium { color: orange; }
-  .priority.high   { color: red;    }
-
-  /* Toggle button */
-  .toggle-button {
-    background-color: #007acc;
-    border: none;
-    color: white;
-    font-size: 0.9rem;
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
-    cursor: pointer;
-  }
-
-  .toggle-button:hover {
-    background-color: #005fa3;
-  }
-
-  .task-notes {
-    background: #f0f3f7;
-    padding: 10px;
-    margin-top: 10px;
-    border-left: 4px solid #007acc;
-    border-radius: 6px;
-    font-size: 0.95rem;
-  }
-
-  /* ==============================================
-     Shifts & Other Lists
-     ============================================== */
-  .shift-list {
-    list-style: none;
-    padding-left: 0;
-  }
-
-  .shift-list li {
-    padding: 10px;
-    border-bottom: 1px solid #ddd;
-  }
-
-  /* ==============================================
-     Generic Form Styling
-     ============================================== */
-  form label {
-    display: block;
-    margin-top: 10px;
-  }
-
-  form input,
-  form select,
-  form textarea {
-    width: 100%;
-    padding: 8px;
-    margin-top: 5px;
-  }
-
-  form button {
-    margin-top: 15px;
-    padding: 10px 20px;
-    background-color: #007acc;
-    color: white;
-    border: none;
-    cursor: pointer;
-  }
-
-  form button:hover {
-    background-color: #005ea3;
-  }
-
-  /* Empty state */
-  .empty-state {
-    text-align: center;
-    color: #888;
-    font-style: italic;
-    margin-top: 30px;
-  }
-
-  /* ==============================================
-     Dashboard Grid (for base.html scenario)
-     ============================================== */
+/* === Responsive === */
+@media (max-width: 800px) {
   .dashboard-grid {
-    display: flex;
     flex-direction: column;
-    gap: 20px;
-    width: 100%;
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 0 20px 40px;
-    box-sizing: border-box;
   }
-
-  .shift-preview,
-  .task-panel {
-    width: 100%;
+  .sidebar {
+    display: none; /* hide sidebar on small screens */
   }
-
-  .full-width {
-    width: 100% !important;
+  .main-content {
+    padding: 10px;
   }
-
-  /* ==============================================
-     Responsive Tweaks
-     ============================================== */
-  @media (min-width: 900px) {
-    .dashboard-grid.manager {
-      flex-direction: row;
-      align-items: flex-start;
-    }
-    .sidebar {
-      flex: 0 0 220px;
-      width: 220px;
-    }
-    .main-content {
-      flex: 1;
-      width: calc(100% - 220px);
-    }
-    .shift-preview { width: 35%; }
-    .task-panel   { width: 65%; }
-  }
-
-  @media (max-width: 600px) {
-    .filter-form,
-    .add-form {
-      flex-direction: column;
-      align-items: stretch;
-    }
-    .filter-form select,
-    .add-form input,
-    .add-form select,
-    .add-form button,
-    .add-form textarea {
-      width: 100%;
-      font-size: 1rem;
-    }
-    .top-nav {
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 8px;
-      margin-right: 20px;
-    }
-    .summary-bar {
-      font-size: 0.95rem;
-      padding: 8px;
-    }
-    .task-meta {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 6px;
-    }
-    .task-header {
-      flex-wrap: wrap;
-    }
-  }
-
-  /* ==============================================
-     Calendar Overrides
-     ============================================== */
-  .calendar-container {
-    flex: 1;
-    width: 100%;
-    max-width: none;
-    margin: 0 auto;
-    padding: 10px 0;
-    box-sizing: border-box;
-    min-height: 400px;
-  }
-
-  #calendar {
-    width: 100%;
-    height: 100%;
-  }
-
-  /* ensure toolbar floats above grid with space */
-  .fc-header-toolbar {
-    margin-bottom: 1rem;
-  }
+}

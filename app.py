@@ -112,33 +112,67 @@ def logout():
     return redirect(url_for("login"))
 
 # ──────── Home / Dashboard ────────
+
 @app.route("/")
 @login_required
 def index():
     username = session["username"]
-    role = session.get("role","member")
-    today = datetime.today().date()
+    role     = session.get("role", "member")
+    today    = datetime.today().date()
 
+    users = load_users()
     tasks = load_tasks()
+
     # mark overdue
     for t in tasks:
         d = t.get("due") or t.get("due_date")
         try:
-            due_d = datetime.strptime(d,"%Y-%m-%d").date()
-            t["overdue"] = not t.get("done",False) and due_d < today
+            due_d = datetime.strptime(d, "%Y-%m-%d").date()
+            t["overdue"] = not t.get("done", False) and due_d < today
         except:
             t["overdue"] = False
 
-    visible = tasks if role=="manager" else [
-        t for t in tasks if t.get("assigned_to","").lower()==username.lower()
+    # filter which tasks this user should see
+    visible = tasks if role == "manager" else [
+        t for t in tasks
+        if t.get("assigned_to", "").lower() == username.lower()
     ]
 
     assignees = sorted({t["assigned_to"] for t in tasks if t.get("assigned_to")})
+    groups   = load_groups()             # returns list of {id, name, ...}
+    all_msgs = load_group_messages()     # returns dict: group_id → [ {sender, timestamp, text}, … ]
+
+    # map group_id → name for quick lookup
+    name_by_id = {g["id"]: g["name"] for g in groups}
+    # map username → display_name for quick lookup
+    disp_by_user = {u["username"]: u["display_name"] for u in users}
+
+    flat = []
+    for gid, msgs in all_msgs.items():
+        for m in msgs:
+            flat.append({
+                "group_id":    gid,
+                "group_name":  name_by_id.get(gid, gid),
+                "sender":      m["sender"],
+                "sender_disp": disp_by_user.get(m["sender"], m["sender"].title()),
+                "text":        m["text"],
+                "timestamp":   m["timestamp"],
+            })
+
+    # sort descending by timestamp, then take the top 5
+    latest_chats = sorted(
+        flat,
+        key=lambda x: x["timestamp"],
+        reverse=True
+    )[:5]
+    # ─────────────────────────────────────────────────────────────────────────
+
     return render_template(
         "index.html",
         tasks=visible,
         assignees=assignees,
-        role=role
+        role=role,
+        latest_chats=latest_chats
     )
 
 # ──────── Task CRUD & Toggle ────────
