@@ -176,3 +176,40 @@ input, select, textarea {
     padding: 10px;
   }
 }
+/* chips */
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  margin-left: 8px;
+  line-height: 1.6;
+}
+.chip-prio { background: #eef4ff; color: #2a4b8d; }
+.chip-overdue { background: #ffe3e3; color: #a30000; }
+.chip-today { background: #fff3cd; color: #7a5b00; }
+
+/* unread badge */
+.badge {
+  display: inline-block;
+  min-width: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #007acc;
+  color: #fff;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+/* group chat cards on homepage */
+.group-cards { display: flex; flex-direction: column; gap: 10px; }
+.group-card {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #f6f9fc; padding: 12px 14px; border-radius: 10px; text-decoration: none;
+}
+.group-card:hover { background: #eef4f9; }
+.group-title { font-weight: 600; margin-bottom: 2px; color: #222; }
+.group-last { color: #444; font-size: 0.95rem; }
+.group-last .last-text { opacity: 0.9; }
+.group-last .last-time { margin-left: 6px; opacity: 0.6; font-size: 0.85rem; }

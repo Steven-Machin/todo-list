@@ -1,128 +1,133 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>To-Do Dashboard</title>
+  <title>Home — To Do App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="sidebar">
-        <h2>Menu</h2>
-        <a href="/">Home</a>
-        <a href="/tasks">Task Manager</a>
-        <a href="/titles">Team Member Manager</a>
-        <a href="/calendar">Calendar</a>
-        <a href="/overdue">Overdue Tasks</a>
-        <a href="/groups">Group Chats</a>
-        <a href="/settings">Settings</a>
-        <a href="/logout">Logout</a>
-      </div>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="{{ url_for('index') }}">Home</a>
+    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
+    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+    <a href="{{ url_for('settings') }}">Settings</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+  </div>
 
   <div class="main-content">
-    <h1>{{ app_name }}</h1>
-
-```
-{% if role == 'manager' %}
-  <section class="dashboard-grid manager">
     <div class="container">
-      <h2>Task Overview</h2>
-      <form class="filter-form" method="get" action="/">
-        <label for="assignee">Filter by assignee:</label>
-        <select name="assignee">
-          <option value="All" {% if assignee_filter == 'All' %}selected{% endif %}>All</option>
-          {% for name in assignees %}
-            <option value="{{ name }}" {% if assignee_filter == name %}selected{% endif %}>{{ name }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit">Apply</button>
-      </form>
-      <ul class="task-list">
-        {% for task in tasks %}
-          <li class="task-item {% if task.overdue %}overdue{% endif %}">
-            <span class="task-text {% if task.done %}done{% endif %}">{{ loop.index }}. {{ task.text }}</span>
-            <div class="task-meta">
-              <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
-              <span class="assigned">Assigned to: {{ task.assigned_to }}</span>
-              {% if task.due %}<span class="due">Due: {{ task.due }}</span>{% endif %}
-            </div>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
 
-    <div class="container">
-      <h2>Latest Group Chat</h2>
-      {% if latest_chats %}
-      <div class="chat-preview container">
-        <ul class="chat-list">
-          {% for msg in latest_chats %}
-            <li>
-              <strong>
-                <a href="{{ url_for('view_group', group_id=msg.group_id) }}">
-                  {{ msg.group_name }}
-                </a> &rsaquo;
-                {{ msg.sender_disp }}
-              </strong>
-              : {{ msg.text }}
+      <h1>Welcome back{% if role!='manager' %}, {{ session['username'].title() }}{% endif %}</h1>
+
+      <!-- My Tasks -->
+      <section class="task-panel">
+        <h2>My Tasks</h2>
+        <ul class="task-list">
+          {% for t in tasks %}
+            <li class="task-item {% if t.overdue %}overdue{% endif %}">
+              <div class="task-header">
+                <span class="task-text {% if t.done %}done{% endif %}">{{ t.text }}</span>
+                {% if t.priority %}
+                  <span class="chip chip-prio">{{ t.priority }}</span>
+                {% endif %}
+                {% if t.overdue %}
+                  <span class="chip chip-overdue">Overdue</span>
+                {% elif t.due_today %}
+                  <span class="chip chip-today">Due today</span>
+                {% endif %}
+              </div>
+              <div class="task-meta">
+                {% if t.assigned_to %}<span>Assigned to: {{ t.assigned_to }}</span>{% endif %}
+                {% if t.due %}<span>Due: {{ t.due }}</span>{% elif t.due_date %}<span>Due: {{ t.due_date }}</span>{% endif %}
+                {% if t.completed_at %}
+                  <span>Completed: {{ t.completed_at }}</span>
+                {% endif %}
+              </div>
+              {% if t.notes %}
+                <div class="task-notes"><strong>Notes:</strong> {{ t.notes }}</div>
+              {% endif %}
             </li>
+          {% else %}
+            <li class="empty-state">No tasks yet.</li>
           {% endfor %}
         </ul>
-      </div>
-    {% endif %}
-  </section>
+      </section>
 
-{% elif role == 'member' %}
-  <section class="dashboard-grid">
-    <div class="container">
-      <h2>Your Tasks</h2>
-      <ul class="task-list">
-        {% for task in tasks %}
-          <li class="task-item {% if task.overdue %}overdue{% endif %}">
-            <form method="post" action="/toggle/{{ loop.index0 }}">
-                <input type="checkbox" name="done" onchange="this.form.submit()" {% if task.done %}checked{% endif %}>
-              </form>
-            <span class="task-text {% if task.done %}done{% endif %}">{{ loop.index }}. {{ task.text }}</span>
-            <div class="task-meta">
-              {% if task.due %}<span class="due">Due: {{ task.due }}</span>{% endif %}
-              {% if task.notes %}<div class="task-notes">Notes: {{ task.notes }}</div>{% endif %}
-            </div>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
+      <!-- Latest Chats -->
+      <section class="task-panel">
+        <h2>Latest Chats</h2>
+        {% if group_cards %}
+          <div class="group-cards">
+            {% for gc in group_cards %}
+              <a class="group-card" href="{{ url_for('view_group', group_id=gc.id) }}">
+                <div class="group-card-main">
+                  <div class="group-title">{{ gc.name }}</div>
+                  {% if gc.last %}
+                    <div class="group-last">
+                      <strong>{{ gc.last_sender_display }}</strong>:
+                      <span class="last-text">{{ gc.last.text }}</span>
+                      <small class="last-time">{{ gc.last.timestamp.replace('T',' ') }}</small>
+                    </div>
+                  {% else %}
+                    <div class="group-last"><em>No messages yet.</em></div>
+                  {% endif %}
+                </div>
+                {% if gc.unread and gc.unread > 0 %}
+                  <span class="badge">{{ gc.unread }}</span>
+                {% endif %}
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="empty-state">No group chats to display.</p>
+        {% endif %}
+      </section>
 
-    <div class="container">
-      <h2>Clock In / Out</h2>
-      <form action="/clock" method="post">
-        <label for="title">Select Title</label>
-        <select name="title">
-          {% for title in user_titles %}
-            <option value="{{ title }}">{{ title }}</option>
+      <!-- My Reminders -->
+      <section class="task-panel">
+        <h2>My Reminders</h2>
+
+        <form class="add-form" method="post" action="{{ url_for('add_reminder') }}">
+          <input type="text" name="title" placeholder="Reminder title" required>
+          <input type="date" name="date">
+          <input type="time" name="time">
+          <input type="text" name="notes" placeholder="Notes (optional)">
+          <button type="submit">Add</button>
+        </form>
+
+        <ul class="task-list">
+          {% for r in reminders %}
+            <li class="task-item {% if r.is_due %}overdue{% endif %}">
+              <div class="task-header">
+                <span class="task-text">{{ r.title }}</span>
+                {% if r.is_due %}<span class="chip chip-overdue">Due</span>{% endif %}
+              </div>
+              <div class="task-meta">
+                <span>{{ r.nice }}</span>
+                {% if r.notes %}<span>{{ r.notes }}</span>{% endif %}
+                <span class="task-actions" style="margin-left:auto;">
+                  <form method="post" action="{{ url_for('snooze_reminder', rid=r.id) }}" style="display:inline;">
+                    <input type="hidden" name="minutes" value="10">
+                    <button type="submit">Snooze 10m</button>
+                  </form>
+                  <form method="post" action="{{ url_for('dismiss_reminder', rid=r.id) }}" style="display:inline;">
+                    <button type="submit">Dismiss</button>
+                  </form>
+                </span>
+              </div>
+            </li>
+          {% else %}
+            <li class="empty-state">No reminders yet.</li>
           {% endfor %}
-        </select>
-        <button type="submit" name="action" value="in">Clock In</button>
-        <button type="submit" name="action" value="out">Clock Out</button>
-      </form>
-    </div>
+        </ul>
+      </section>
 
-    <div class="container">
-      <h2>Latest Group Chat</h2>
-      {% if latest_group %}
-        <div class="group-preview">
-          <strong>{{ latest_group.name }}</strong><br>
-          {{ latest_group.last_message|truncate(100) }}
-          <a href="/groups/{{ latest_group.id }}">Open Chat</a>
-        </div>
-      {% else %}
-        <p>No recent group chats.</p>
-      {% endif %}
     </div>
-  </section>
-{% endif %}
-```
-
   </div>
 </body>
 </html>
