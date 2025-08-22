@@ -19,6 +19,10 @@ GROUP_MESSAGES_FILE  = "group_messages.json"
 REMINDERS_FILE       = "reminders.json"
 GROUP_SEEN_FILE      = "group_seen.json"
 
+# NEW: settings storage
+USER_SETTINGS_FILE   = "user_settings.json"   # {username: {...}}
+ORG_SETTINGS_FILE    = "org_settings.json"    # {key: value}
+
 UPLOAD_FOLDER        = "static/uploads"
 ALLOWED_EXTS         = {"png","jpg","jpeg","gif"}
 
@@ -75,6 +79,13 @@ def save_reminders(items):    save_json(REMINDERS_FILE, items)
 
 def load_group_seen():        return load_json(GROUP_SEEN_FILE, {})
 def save_group_seen(data):    save_json(GROUP_SEEN_FILE, data)
+
+# NEW: settings wrappers
+def load_user_settings():     return load_json(USER_SETTINGS_FILE, {})   # {username: prefs}
+def save_user_settings(d):    save_json(USER_SETTINGS_FILE, d)
+
+def load_org_settings():      return load_json(ORG_SETTINGS_FILE, {})    # {key: value}
+def save_org_settings(d):     save_json(ORG_SETTINGS_FILE, d)
 
 # ──────── Jinja filter ────────
 @app.template_filter('format_datetime')
@@ -222,13 +233,17 @@ def index():
             r["is_due"] = False
             r["nice"] = "No time"
 
+    # NEW: load and pass user preferences (safe if index.html doesn't use them)
+    user_prefs = load_user_settings().get(username, {})
+
     return render_template(
         "index.html",
         tasks=visible,
         assignees=assignees,
         role=role,
         group_cards=group_cards,
-        reminders=my_rem
+        reminders=my_rem,
+        user_prefs=user_prefs
     )
 
 # ──────── Reminders (add/delete/toggle) ────────
@@ -601,11 +616,72 @@ def task_events():
             })
     return jsonify(evts)
 
-# ──────── Settings ────────
-@app.route("/settings")
+# ──────── Settings (NEW: fully functional) ────────
+@app.route("/settings", methods=["GET","POST"])
 @login_required
 def settings():
-    return render_template("settings.html")
+    username = session["username"]
+    role = session.get("role","member")
+
+    user_settings_all = load_user_settings()
+    org_settings = load_org_settings()
+
+    # defaults
+    my = user_settings_all.get(username, {
+        "display_name": None,
+        "compact": False,
+        "time_format": "12h",     # "12h" or "24h"
+        "default_page": "home",   # "home", "tasks", "chats"
+        "mute_all_chats": False
+    })
+    org_defaults = {
+        "supervisor_title_label": "Supervisor",
+        "allow_task_photos": True,
+        "weekly_recap_enabled": False
+    }
+    for k,v in org_defaults.items():
+        org_settings.setdefault(k, v)
+
+    if request.method == "POST":
+        form_type = request.form.get("form_type","personal")
+        if form_type == "personal":
+            my["display_name"] = request.form.get("display_name","").strip() or None
+            my["compact"] = bool(request.form.get("compact"))
+            my["time_format"] = request.form.get("time_format","12h")
+            my["default_page"] = request.form.get("default_page","home")
+            my["mute_all_chats"] = bool(request.form.get("mute_all_chats"))
+            user_settings_all[username] = my
+            save_user_settings(user_settings_all)
+
+            # also reflect on users.json (optional)
+            if my["display_name"]:
+                users = load_users()
+                u = next((u for u in users if u["username"]==username), None)
+                if u:
+                    u["display_name"] = my["display_name"]
+                    save_users(users)
+
+            flash("Your preferences were saved.")
+            return redirect(url_for("settings"))
+
+        elif form_type == "org" and role == "manager":
+            org_settings["supervisor_title_label"] = request.form.get("supervisor_title_label","Supervisor").strip() or "Supervisor"
+            org_settings["allow_task_photos"] = bool(request.form.get("allow_task_photos"))
+            org_settings["weekly_recap_enabled"] = bool(request.form.get("weekly_recap_enabled"))
+            save_org_settings(org_settings)
+            flash("Organization settings saved.")
+            return redirect(url_for("settings"))
+
+    # compute effective display name
+    users = load_users()
+    u = next((u for u in users if u["username"]==username), None)
+    effective_display = my["display_name"] or (u.get("display_name") if u else username.title())
+
+    return render_template("settings.html",
+                           role=role,
+                           my_prefs=my,
+                           org_settings=org_settings,
+                           effective_display=effective_display)
 
 # ──────── Overdue ────────
 @app.route("/overdue")

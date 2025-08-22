@@ -1,0 +1,9 @@
+{
+  "jeremy": {
+    "display_name": "Jeremy",
+    "compact": false,
+    "time_format": "12h",
+    "default_page": "chats",
+    "mute_all_chats": false
+  }
+}

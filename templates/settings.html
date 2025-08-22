@@ -1,7 +1,95 @@
-{% extends "base.html" %}
-{% block title %}Settings – To Do App{% endblock %}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
 
-{% block content %}
-  <h1>Settings</h1>
-  <p>Coming soon…</p>
-{% endblock %}
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="{{ url_for('index') }}">Home</a>
+    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
+    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
+ <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+    {% if role == 'manager' %}
+      <a href="{{ url_for('group_chat_manager') }}">Manage Groups</a>
+    {% endif %}
+    <a href="{{ url_for('settings') }}">Settings</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+  </div>
+
+  <div class="main-content">
+    <div class="container">
+      <h1>Settings</h1>
+
+      <h2>Personal Preferences</h2>
+      <form class="add-form" method="post" action="{{ url_for('settings') }}" style="align-items:flex-end;">
+        <input type="hidden" name="form_type" value="personal">
+        <div style="flex:1 1 250px;">
+          <label>Display name</label>
+          <input type="text" name="display_name" placeholder="Your name" value="{{ my_prefs.display_name or effective_display }}">
+        </div>
+
+        <div>
+          <label>Time format</label>
+          <select name="time_format">
+            <option value="12h" {% if my_prefs.time_format == '12h' %}selected{% endif %}>12-hour</option>
+            <option value="24h" {% if my_prefs.time_format == '24h' %}selected{% endif %}>24-hour</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Default page</label>
+          <select name="default_page">
+            <option value="home"  {% if my_prefs.default_page == 'home' %}selected{% endif %}>Home</option>
+            <option value="tasks" {% if my_prefs.default_page == 'tasks' %}selected{% endif %}>Tasks</option>
+            <option value="chats" {% if my_prefs.default_page == 'chats' %}selected{% endif %}>Group Chats</option>
+          </select>
+        </div>
+
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" name="compact" {% if my_prefs.compact %}checked{% endif %}>
+          Compact mode
+        </label>
+
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" name="mute_all_chats" {% if my_prefs.mute_all_chats %}checked{% endif %}>
+          Mute all chat badges
+        </label>
+
+        <button type="submit">Save</button>
+      </form>
+
+      {% if role == 'manager' %}
+        <h2 style="margin-top:24px;">Organization Settings</h2>
+        <form class="add-form" method="post" action="{{ url_for('settings') }}" style="align-items:flex-end;">
+          <input type="hidden" name="form_type" value="org">
+
+          <div style="flex:1 1 260px;">
+            <label>Supervisor title label</label>
+            <input type="text" name="supervisor_title_label"
+                   value="{{ org_settings.supervisor_title_label }}">
+          </div>
+
+          <label style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" name="allow_task_photos" {% if org_settings.allow_task_photos %}checked{% endif %}>
+            Allow task photo uploads
+          </label>
+
+          <label style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" name="weekly_recap_enabled" {% if org_settings.weekly_recap_enabled %}checked{% endif %}>
+            Weekly recap (placeholder)
+          </label>
+
+          <button type="submit">Save</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>
