@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Home — To Do App</title>
+  <title>Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+
   <div class="sidebar">
     <h2>Menu</h2>
     <a href="{{ url_for('index') }}">Home</a>
@@ -21,112 +22,118 @@
 
   <div class="main-content">
     <div class="container">
+      <h1>Welcome</h1>
 
-      <h1>Welcome back{% if role!='manager' %}, {{ session['username'].title() }}{% endif %}</h1>
+      <!-- Search -->
+      <form class="search-form" action="{{ url_for('search') }}" method="get">
+        <input type="text" name="q" placeholder="Search tasks, chats, people…" required>
+        <button type="submit">Search</button>
+      </form>
 
-      <!-- My Tasks -->
-      <section class="task-panel">
-        <h2>My Tasks</h2>
-        <ul class="task-list">
-          {% for t in tasks %}
-            <li class="task-item {% if t.overdue %}overdue{% endif %}">
-              <div class="task-header">
-                <span class="task-text {% if t.done %}done{% endif %}">{{ t.text }}</span>
-                {% if t.priority %}
-                  <span class="chip chip-prio">{{ t.priority }}</span>
-                {% endif %}
-                {% if t.overdue %}
-                  <span class="chip chip-overdue">Overdue</span>
-                {% elif t.due_today %}
-                  <span class="chip chip-today">Due today</span>
-                {% endif %}
-              </div>
-              <div class="task-meta">
-                {% if t.assigned_to %}<span>Assigned to: {{ t.assigned_to }}</span>{% endif %}
-                {% if t.due %}<span>Due: {{ t.due }}</span>{% elif t.due_date %}<span>Due: {{ t.due_date }}</span>{% endif %}
-                {% if t.completed_at %}
-                  <span>Completed: {{ t.completed_at }}</span>
-                {% endif %}
-              </div>
-              {% if t.notes %}
-                <div class="task-notes"><strong>Notes:</strong> {{ t.notes }}</div>
-              {% endif %}
-            </li>
-          {% else %}
-            <li class="empty-state">No tasks yet.</li>
-          {% endfor %}
-        </ul>
-      </section>
-
-      <!-- Latest Chats -->
-      <section class="task-panel">
-        <h2>Latest Chats</h2>
-        {% if group_cards %}
-          <div class="group-cards">
-            {% for gc in group_cards %}
-              <a class="group-card" href="{{ url_for('view_group', group_id=gc.id) }}">
-                <div class="group-card-main">
-                  <div class="group-title">{{ gc.name }}</div>
-                  {% if gc.last %}
-                    <div class="group-last">
-                      <strong>{{ gc.last_sender_display }}</strong>:
-                      <span class="last-text">{{ gc.last.text }}</span>
-                      <small class="last-time">{{ gc.last.timestamp.replace('T',' ') }}</small>
-                    </div>
-                  {% else %}
-                    <div class="group-last"><em>No messages yet.</em></div>
+      <div class="dashboard-grid">
+        <!-- Left column: Tasks + Reminders -->
+        <div class="task-panel">
+          <h2>My Tasks</h2>
+          {% if tasks %}
+            <ul class="task-list">
+              {% for t in tasks %}
+                <li class="task-item {% if t.overdue %}overdue{% endif %}">
+                  <div class="task-header">
+                    <span class="task-text {{ 'done' if t.get('done') else '' }}">{{ t.text }}</span>
+                    <span class="chip chip-prio">{{ t.priority }}</span>
+                    {% if t.overdue %}<span class="chip chip-overdue">Overdue</span>{% endif %}
+                    {% if t.due_today %}<span class="chip chip-today">Due Today</span>{% endif %}
+                  </div>
+                  <div class="task-meta">
+                    {% if t.assigned_to %}<span>Assigned: {{ t.assigned_to }}</span>{% endif %}
+                    {% if t.due or t.due_date %}
+                      <span>Due: {{ t.due or t.due_date }}</span>
+                    {% endif %}
+                    {% if t.completed_at %}
+                      <span>Completed: {{ t.completed_at|format_datetime }}</span>
+                    {% endif %}
+                  </div>
+                  {% if t.notes %}
+                    <div class="task-notes">{{ t.notes }}</div>
                   {% endif %}
-                </div>
-                {% if gc.unread and gc.unread > 0 %}
-                  <span class="badge">{{ gc.unread }}</span>
-                {% endif %}
-              </a>
-            {% endfor %}
-          </div>
-        {% else %}
-          <p class="empty-state">No group chats to display.</p>
-        {% endif %}
-      </section>
-
-      <!-- My Reminders -->
-      <section class="task-panel">
-        <h2>My Reminders</h2>
-
-        <form class="add-form" method="post" action="{{ url_for('add_reminder') }}">
-          <input type="text" name="title" placeholder="Reminder title" required>
-          <input type="date" name="date">
-          <input type="time" name="time">
-          <input type="text" name="notes" placeholder="Notes (optional)">
-          <button type="submit">Add</button>
-        </form>
-
-        <ul class="task-list">
-          {% for r in reminders %}
-            <li class="task-item {% if r.is_due %}overdue{% endif %}">
-              <div class="task-header">
-                <span class="task-text">{{ r.title }}</span>
-                {% if r.is_due %}<span class="chip chip-overdue">Due</span>{% endif %}
-              </div>
-              <div class="task-meta">
-                <span>{{ r.nice }}</span>
-                {% if r.notes %}<span>{{ r.notes }}</span>{% endif %}
-                <span class="task-actions" style="margin-left:auto;">
-                  <form method="post" action="{{ url_for('snooze_reminder', rid=r.id) }}" style="display:inline;">
-                    <input type="hidden" name="minutes" value="10">
-                    <button type="submit">Snooze 10m</button>
-                  </form>
-                  <form method="post" action="{{ url_for('dismiss_reminder', rid=r.id) }}" style="display:inline;">
-                    <button type="submit">Dismiss</button>
-                  </form>
-                </span>
-              </div>
-            </li>
+                </li>
+              {% endfor %}
+            </ul>
           {% else %}
-            <li class="empty-state">No reminders yet.</li>
-          {% endfor %}
-        </ul>
-      </section>
+            <p class="empty-state">No tasks to show.</p>
+          {% endif %}
 
+          <!-- Reminders -->
+          <h2 style="margin-top:28px;">Reminders</h2>
+
+          <form class="add-form" method="post" action="{{ url_for('add_reminder') }}">
+            <input type="text" name="text" placeholder="Reminder…" required>
+            <input type="datetime-local" name="due_at">
+            <button type="submit">Add</button>
+          </form>
+
+          {% if reminders %}
+            <ul class="task-list">
+              {% for r in reminders %}
+                <li class="task-item">
+                  <div class="task-header">
+                    <span class="task-text {{ 'done' if r.done else '' }}">{{ r.text }}</span>
+                    {% if r.is_due %}<span class="chip chip-overdue">Due</span>{% endif %}
+                  </div>
+                  <div class="task-meta">
+                    <span>{{ r.nice }}</span>
+                    <div class="task-actions">
+                      <form method="post" action="{{ url_for('reminders_toggle', rid=r.id) }}" style="display:inline">
+                        <button type="submit" class="link-button">{{ 'Undo' if r.done else 'Done' }}</button>
+                      </form>
+                      <form method="post" action="{{ url_for('reminders_delete', rid=r.id) }}" style="display:inline">
+                        <button type="submit" class="link-button">Delete</button>
+                      </form>
+                    </div>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="empty-state">No reminders yet.</p>
+          {% endif %}
+        </div>
+
+        <!-- Right column: Group chats -->
+        <div class="shift-preview">
+          <div class="header-row">
+            <h2>Latest Group Chats</h2>
+            <form method="post" action="{{ url_for('groups_mark_all_read') }}">
+              <button type="submit" class="link-button">Mark all read</button>
+            </form>
+          </div>
+
+          {% if group_cards %}
+            <div class="group-cards">
+              {% for g in group_cards %}
+                <a class="group-card" href="{{ url_for('view_group', group_id=g.id) }}">
+                  <div>
+                    <div class="group-title">{{ g.name }}</div>
+                    {% if g.last %}
+                      <div class="group-last">
+                        <span class="last-text"><strong>{{ g.last_sender_display }}</strong>: {{ g.last.text }}</span>
+                        <span class="last-time">· {{ g.last.timestamp|replace("T"," ") }}</span>
+                      </div>
+                    {% else %}
+                      <div class="group-last"><em>No messages yet</em></div>
+                    {% endif %}
+                  </div>
+                  {% if g.unread and g.unread > 0 %}
+                    <span class="badge">{{ g.unread }}</span>
+                  {% endif %}
+                </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="empty-state">No group chats yet.</p>
+          {% endif %}
+        </div>
+      </div>
     </div>
   </div>
 </body>
