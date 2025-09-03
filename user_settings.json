@@ -4,6 +4,6 @@
     "compact": false,
     "time_format": "12h",
     "default_page": "chats",
-    "mute_all_chats": false
+    "mute_all_chats": true
   }
 }

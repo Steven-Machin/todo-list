@@ -1,4 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort
+# app.py
+from flask import (
+    Flask, render_template, request, redirect, url_for,
+    flash, session, jsonify, abort
+)
 import json, os, uuid
 from datetime import datetime, timedelta
 from functools import wraps
@@ -8,20 +12,19 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.secret_key = "manager-task-secret"
 
-# ──────── File paths & config ────────
+# ─────────────────────────────── Paths / Config ───────────────────────────────
 TASKS_FILE           = "tasks.json"
 USERS_FILE           = "users.json"
 SHIFTS_FILE          = "shifts.json"
 TITLES_FILE          = "titles.json"
+
 GROUPS_FILE          = "group_chats.json"
 GROUP_TASKS_FILE     = "group_tasks.json"
 GROUP_MESSAGES_FILE  = "group_messages.json"
-REMINDERS_FILE       = "reminders.json"
 GROUP_SEEN_FILE      = "group_seen.json"
 
-# NEW: settings storage
-USER_SETTINGS_FILE   = "user_settings.json"   # {username: {...}}
-ORG_SETTINGS_FILE    = "org_settings.json"    # {key: value}
+REMINDERS_FILE       = "reminders.json"
+PREFERENCES_FILE     = "preferences.json"
 
 UPLOAD_FOLDER        = "static/uploads"
 ALLOWED_EXTS         = {"png","jpg","jpeg","gif"}
@@ -29,15 +32,15 @@ ALLOWED_EXTS         = {"png","jpg","jpeg","gif"}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# ──────── Helpers ────────
+# ─────────────────────────────── Utilities ───────────────────────────────
 def load_json(path, default):
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return default
 
 def save_json(path, data):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 def allowed_file(fn):
@@ -52,7 +55,23 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ──────── JSON wrappers ────────
+def manager_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if session.get("role") != "manager":
+            flash("Managers only.")
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return wrapper
+
+@app.context_processor
+def inject_user_ctx():
+    return {
+        "current_user": session.get("username"),
+        "current_role": session.get("role", "member")
+    }
+
+# ─────────────────────────────── JSON wrappers ───────────────────────────────
 def load_tasks():             return load_json(TASKS_FILE, [])
 def save_tasks(t):            save_json(TASKS_FILE, t)
 
@@ -74,20 +93,16 @@ def save_group_tasks(g):      save_json(GROUP_TASKS_FILE, g)
 def load_group_messages():    return load_json(GROUP_MESSAGES_FILE, {})
 def save_group_messages(m):   save_json(GROUP_MESSAGES_FILE, m)
 
+def load_group_seen():        return load_json(GROUP_SEEN_FILE, {})
+def save_group_seen(d):       save_json(GROUP_SEEN_FILE, d)
+
 def load_reminders():         return load_json(REMINDERS_FILE, [])
 def save_reminders(items):    save_json(REMINDERS_FILE, items)
 
-def load_group_seen():        return load_json(GROUP_SEEN_FILE, {})
-def save_group_seen(data):    save_json(GROUP_SEEN_FILE, data)
+def load_prefs():             return load_json(PREFERENCES_FILE, {})
+def save_prefs(p):            save_json(PREFERENCES_FILE, p)
 
-# NEW: settings wrappers
-def load_user_settings():     return load_json(USER_SETTINGS_FILE, {})   # {username: prefs}
-def save_user_settings(d):    save_json(USER_SETTINGS_FILE, d)
-
-def load_org_settings():      return load_json(ORG_SETTINGS_FILE, {})    # {key: value}
-def save_org_settings(d):     save_json(ORG_SETTINGS_FILE, d)
-
-# ──────── Jinja filter ────────
+# ─────────────────────────────── Jinja filters ───────────────────────────────
 @app.template_filter('format_datetime')
 def format_datetime(value):
     """Accept ISO 'YYYY-MM-DDTHH:MM' or 12h 'YYYY-MM-DDT%I:%M %p' and format nicely."""
@@ -103,7 +118,7 @@ def format_datetime(value):
             return value
     return dt.strftime("%b %d, %Y %I:%M %p")
 
-# ──────── Auth ────────
+# ─────────────────────────────── Auth ───────────────────────────────
 @app.route("/signup", methods=["GET","POST"])
 def signup():
     if request.method == "POST":
@@ -146,7 +161,7 @@ def logout():
     flash("You have been logged out.")
     return redirect(url_for("login"))
 
-# ──────── Home / Dashboard ────────
+# ─────────────────────────────── Home / Dashboard ───────────────────────────────
 @app.route("/")
 @login_required
 def index():
@@ -155,9 +170,10 @@ def index():
     today = datetime.today().date()
 
     users = load_users()
-    tasks_all = load_tasks()
+    uname_to_disp = {u["username"]: u.get("display_name") or u["username"].title() for u in users}
 
-    # mark overdue + due_today
+    # tasks
+    tasks_all = load_tasks()
     for t in tasks_all:
         d = t.get("due") or t.get("due_date")
         try:
@@ -168,28 +184,18 @@ def index():
             t["overdue"] = False
             t["due_today"] = False
 
-    # which tasks this user sees
     visible = tasks_all if role == "manager" else [
         t for t in tasks_all if t.get("assigned_to","").lower() == username.lower()
     ]
-
-    # assignee list for filters (if used on homepage)
     assignees = sorted({t["assigned_to"] for t in tasks_all if t.get("assigned_to")})
 
-    # ----- Latest chats + unread counts (group cards) -----
+    # group cards (latest + unread)
     groups = load_groups()
     messages_by_group = load_group_messages()
     seen_map_all = load_group_seen()
     user_seen = seen_map_all.get(username, {})
 
-    if role == "manager":
-        my_groups = groups
-    else:
-        my_groups = [g for g in groups if username in g.get("members", [])]
-
-    # map username → display
-    uname_to_disp = {u["username"]: u.get("display_name") or u["username"].title() for u in users}
-
+    my_groups = groups if role == "manager" else [g for g in groups if username in g.get("members", [])]
     group_cards = []
     for g in my_groups:
         gid = g["id"]
@@ -197,11 +203,7 @@ def index():
         last_msg = msgs[-1] if msgs else None
         last_seen = user_seen.get(gid, "1970-01-01T00:00")
         unread = sum(1 for m in msgs if m.get("timestamp","") > last_seen)
-
-        sender_display = None
-        if last_msg:
-            sender_display = uname_to_disp.get(last_msg["sender"], last_msg["sender"].title())
-
+        sender_display = uname_to_disp.get(last_msg["sender"], last_msg["sender"].title()) if last_msg else None
         group_cards.append({
             "id": gid,
             "name": g["name"],
@@ -209,15 +211,12 @@ def index():
             "last": last_msg,
             "last_sender_display": sender_display
         })
-
-    def _last_ts(gc):
-        return gc["last"]["timestamp"] if gc["last"] else ""
+    def _last_ts(gc): return gc["last"]["timestamp"] if gc["last"] else ""
     group_cards.sort(key=lambda gc: (_last_ts(gc), gc["unread"]), reverse=True)
 
-    # ----- Personal reminders (current user) -----
+    # reminders for current user
     all_rem = load_reminders()
     my_rem = [r for r in all_rem if r.get("user") == username]
-
     now = datetime.now()
     for r in my_rem:
         dt_str = r.get("due_at")
@@ -233,8 +232,8 @@ def index():
             r["is_due"] = False
             r["nice"] = "No time"
 
-    # NEW: load and pass user preferences (safe if index.html doesn't use them)
-    user_prefs = load_user_settings().get(username, {})
+    # preferences (theme, density, default calendar scope)
+    prefs = load_prefs().get(username, {"theme":"light","density":"comfortable","calendar_scope":"my","notify_sound":False})
 
     return render_template(
         "index.html",
@@ -243,15 +242,15 @@ def index():
         role=role,
         group_cards=group_cards,
         reminders=my_rem,
-        user_prefs=user_prefs
+        prefs=prefs
     )
 
-# ──────── Reminders (add/delete/toggle) ────────
+# ─────────────────────────────── Reminders ───────────────────────────────
 @app.route("/reminders/add", methods=["POST"], endpoint="add_reminder")
 @login_required
 def reminders_add():
     text = request.form.get("text","").strip()
-    due  = request.form.get("due_at","").strip()  # "YYYY-MM-DDTHH:MM" or ""
+    due  = request.form.get("due_at","").strip()
     if not text:
         flash("Reminder text required.")
         return redirect(url_for("index"))
@@ -271,7 +270,6 @@ def reminders_add():
 @login_required
 def reminders_delete(rid):
     items = load_reminders()
-    # keep others or not owned by user
     items = [r for r in items if not (r.get("id")==rid and r.get("user")==session["username"])]
     save_reminders(items)
     flash("Reminder deleted.")
@@ -288,7 +286,7 @@ def reminders_toggle(rid):
     save_reminders(items)
     return redirect(url_for("index"))
 
-# ──────── Global Search ────────
+# ─────────────────────────────── Global Search ───────────────────────────────
 @app.route("/search")
 @login_required
 def search():
@@ -338,7 +336,7 @@ def search():
                            msg_hits=msg_hits,
                            user_hits=user_hits)
 
-# ──────── Task CRUD & Toggle ────────
+# ─────────────────────────────── Task CRUD / Manager Pages ───────────────────────────────
 @app.route("/add", methods=["POST"])
 @login_required
 def add():
@@ -385,7 +383,6 @@ def toggle(task_id):
         if role=="manager" or t.get("assigned_to","").lower()==username.lower():
             t["done"] = not t.get("done",False)
             if t["done"]:
-                # store as ISO minutes (consistent)
                 t["completed_at"] = datetime.now().isoformat(timespec="minutes")
                 if t.get("recurring")=="weekly" and t.get("due_date"):
                     try:
@@ -444,42 +441,6 @@ def edit(task_id):
                 return render_template("edit.html", task=t, task_id=task_id, assignable_users=assignable)
     return redirect(url_for("tasks_page"))
 
-# ──────── Shifts ────────
-@app.route("/shifts")
-@login_required
-def view_shifts():
-    if session.get("role")!="manager":
-        return redirect(url_for("index"))
-    return render_template("shifts.html", shifts=load_shifts())
-
-@app.route("/shifts/add", methods=["GET","POST"])
-@login_required
-def add_shift():
-    if session.get("role")!="manager":
-        return redirect(url_for("view_shifts"))
-    if request.method=="POST":
-        d = request.form.get("date")
-        s = request.form.get("start_time")
-        e = request.form.get("end_time")
-        a = request.form.get("assigned_to","").strip().lower()
-        if d and s and e and a:
-            sh = load_shifts()
-            sh.append({"date":d,"start_time":s,"end_time":e,"assigned_to":a,"notes":request.form.get("notes","")})
-            save_shifts(sh)
-            flash("Shift added.")
-            return redirect(url_for("view_shifts"))
-        flash("All fields except notes are required.")
-    users = load_users()
-    return render_template("add_shift.html", employees=[u["username"] for u in users if u.get("role")!="manager"])
-
-@app.route("/my-shifts")
-@login_required
-def my_shifts():
-    u = session["username"]
-    sh = [s for s in load_shifts() if s["assigned_to"].lower()==u.lower()]
-    return render_template("my_shifts.html", shifts=sh)
-
-# ──────── Task Manager pages ────────
 @app.route("/tasks")
 @login_required
 def tasks_page():
@@ -504,7 +465,6 @@ def tasks_page():
             "priority_lh": -pd,
             "completed":   datetime.fromisoformat(t.get("completed_at","9999-12-31T00:00"))
         }[sort_by]
-
     ts.sort(key=keyfn)
 
     users = load_users()
@@ -529,20 +489,46 @@ def create_task_page():
     assignable = [u["username"] for u in users if u["role"]!="manager" and any(t.lower() in elig for t in u.get("titles",[]))]
     return render_template("create_task.html", assignable_users=assignable)
 
-# ──────── Team Member Manager ────────
-@app.route("/members")
+# ─────────────────────────────── Shifts ───────────────────────────────
+@app.route("/shifts")
+@manager_required
+def view_shifts():
+    return render_template("shifts.html", shifts=load_shifts())
+
+@app.route("/shifts/add", methods=["GET","POST"])
+@manager_required
+def add_shift():
+    if request.method=="POST":
+        d = request.form.get("date")
+        s = request.form.get("start_time")
+        e = request.form.get("end_time")
+        a = request.form.get("assigned_to","").strip().lower()
+        if d and s and e and a:
+            sh = load_shifts()
+            sh.append({"date":d,"start_time":s,"end_time":e,"assigned_to":a,"notes":request.form.get("notes","")})
+            save_shifts(sh)
+            flash("Shift added.")
+            return redirect(url_for("view_shifts"))
+        flash("All fields except notes are required.")
+    users = load_users()
+    return render_template("add_shift.html", employees=[u["username"] for u in users if u.get("role")!="manager"])
+
+@app.route("/my-shifts")
 @login_required
+def my_shifts():
+    u = session["username"]
+    sh = [s for s in load_shifts() if s["assigned_to"].lower()==u.lower()]
+    return render_template("my_shifts.html", shifts=sh)
+
+# ─────────────────────────────── Team / Titles ───────────────────────────────
+@app.route("/members")
+@manager_required
 def team_member_manager():
-    if session.get("role")!="manager":
-        return redirect(url_for("index"))
     return render_template("team_manager.html", users=load_users())
 
 @app.route("/titles", methods=["GET","POST"])
-@login_required
+@manager_required
 def title_manager():
-    if session.get("role")!="manager":
-        return redirect(url_for("index"))
-
     users = load_users()
     titles = load_titles()
     if request.method=="POST":
@@ -567,10 +553,8 @@ def title_manager():
                            all_titles=titles)
 
 @app.route("/titles/update", methods=["POST"])
-@login_required
+@manager_required
 def update_titles():
-    if session.get("role")!="manager":
-        return redirect(url_for("title_manager"))
     users = load_users()
     for u in users:
         add_key = f"add_title_{u['username']}"
@@ -588,12 +572,63 @@ def update_titles():
     flash("Titles updated.")
     return redirect(url_for("title_manager"))
 
-# ──────── Calendar ────────
+# ─────────────────────────────── Calendar ───────────────────────────────
 @app.route("/calendar")
 @login_required
 def calendar_view():
     return render_template("calendar.html", role=session.get("role","member"))
 
+# New unified feed (tasks + shifts), supports ?scope=my|all
+@app.route("/api/calendar")
+@login_required
+def calendar_feed():
+    scope = request.args.get("scope","my")  # "my" or "all"
+    user  = session["username"]
+    role  = session.get("role","member")
+    show_all = (scope == "all" and role == "manager")
+
+    # tasks
+    t_all = load_tasks()
+    tasks = t_all if show_all else [
+        t for t in t_all
+        if t.get("assigned_to","").lower() == user.lower() or t.get("created_by","").lower()==user.lower()
+    ]
+
+    events = []
+    for i, t in enumerate(tasks):
+        start = t.get("due") or t.get("due_date")
+        if not start:
+            continue
+        pr = t.get("priority", "Medium")
+        color_map = {"High":"#E6492D", "Medium":"#F3B43E", "Low":"#2FA77A"}
+        events.append({
+            "id": f"task-{i}",
+            "title": f"{t.get('text','Task')} ({pr})",
+            "start": start,
+            "allDay": True,
+            "color": color_map.get(pr, "#2FA77A"),
+            "extendedProps": {"type":"task"}
+        })
+
+    # shifts
+    sh_all = load_shifts()
+    shifts = sh_all if show_all else [s for s in sh_all if s.get("assigned_to","").lower()==user.lower()]
+    for j, s in enumerate(shifts):
+        start = s.get("date")
+        if not start:
+            continue
+        events.append({
+            "id": f"shift-{j}",
+            "title": f"Shift {s.get('start_time','')}–{s.get('end_time','')}",
+            "start": start,
+            "allDay": True,
+            "color": "#4C6EF5",
+            "extendedProps": {"type":"shift"}
+        })
+
+    return jsonify(events)
+
+# Legacy (tasks only) – kept for backward compatibility
 @app.route("/api/tasks/events")
 @login_required
 def task_events():
@@ -616,74 +651,31 @@ def task_events():
             })
     return jsonify(evts)
 
-# ──────── Settings (NEW: fully functional) ────────
-@app.route("/settings", methods=["GET","POST"])
+# ─────────────────────────────── Settings ───────────────────────────────
+@app.route("/settings", methods=["GET"])
 @login_required
 def settings():
-    username = session["username"]
-    role = session.get("role","member")
+    user = session["username"]
+    prefs_all = load_prefs()
+    prefs = prefs_all.get(user, {"theme":"light","density":"comfortable","calendar_scope":"my","notify_sound":False})
+    return render_template("settings.html", prefs=prefs)
 
-    user_settings_all = load_user_settings()
-    org_settings = load_org_settings()
+@app.route("/settings/update", methods=["POST"])
+@login_required
+def settings_update():
+    user = session["username"]
+    prefs_all = load_prefs()
+    prefs = prefs_all.get(user, {})
+    prefs["theme"] = request.form.get("theme","light")
+    prefs["density"] = request.form.get("density","comfortable")
+    prefs["calendar_scope"] = request.form.get("calendar_scope","my")
+    prefs["notify_sound"] = bool(request.form.get("notify_sound"))
+    prefs_all[user] = prefs
+    save_prefs(prefs_all)
+    flash("Settings saved.")
+    return redirect(url_for("settings"))
 
-    # defaults
-    my = user_settings_all.get(username, {
-        "display_name": None,
-        "compact": False,
-        "time_format": "12h",     # "12h" or "24h"
-        "default_page": "home",   # "home", "tasks", "chats"
-        "mute_all_chats": False
-    })
-    org_defaults = {
-        "supervisor_title_label": "Supervisor",
-        "allow_task_photos": True,
-        "weekly_recap_enabled": False
-    }
-    for k,v in org_defaults.items():
-        org_settings.setdefault(k, v)
-
-    if request.method == "POST":
-        form_type = request.form.get("form_type","personal")
-        if form_type == "personal":
-            my["display_name"] = request.form.get("display_name","").strip() or None
-            my["compact"] = bool(request.form.get("compact"))
-            my["time_format"] = request.form.get("time_format","12h")
-            my["default_page"] = request.form.get("default_page","home")
-            my["mute_all_chats"] = bool(request.form.get("mute_all_chats"))
-            user_settings_all[username] = my
-            save_user_settings(user_settings_all)
-
-            # also reflect on users.json (optional)
-            if my["display_name"]:
-                users = load_users()
-                u = next((u for u in users if u["username"]==username), None)
-                if u:
-                    u["display_name"] = my["display_name"]
-                    save_users(users)
-
-            flash("Your preferences were saved.")
-            return redirect(url_for("settings"))
-
-        elif form_type == "org" and role == "manager":
-            org_settings["supervisor_title_label"] = request.form.get("supervisor_title_label","Supervisor").strip() or "Supervisor"
-            org_settings["allow_task_photos"] = bool(request.form.get("allow_task_photos"))
-            org_settings["weekly_recap_enabled"] = bool(request.form.get("weekly_recap_enabled"))
-            save_org_settings(org_settings)
-            flash("Organization settings saved.")
-            return redirect(url_for("settings"))
-
-    # compute effective display name
-    users = load_users()
-    u = next((u for u in users if u["username"]==username), None)
-    effective_display = my["display_name"] or (u.get("display_name") if u else username.title())
-
-    return render_template("settings.html",
-                           role=role,
-                           my_prefs=my,
-                           org_settings=org_settings,
-                           effective_display=effective_display)
-
-# ──────── Overdue ────────
+# ─────────────────────────────── Overdue ───────────────────────────────
 @app.route("/overdue")
 @login_required
 def overdue_tasks():
@@ -705,29 +697,27 @@ def overdue_tasks():
             pass
     return render_template("overdue.html", overdue=overdue, role=role)
 
-# ──────── Group Chat Manager ────────
+# ─────────────────────────────── Group Chats ───────────────────────────────
 @app.route("/groups")
-@login_required
+@manager_required
 def group_chat_manager():
-    if session.get("role")!="manager":
-        return redirect(url_for("index"))
     groups = load_groups()
     users  = load_users()
-    # only those with a “Supervisor” title (case-insensitive exact match)
-    supervisors = [
-        u for u in users
-        if any(t.lower()=="supervisor" for t in u.get("titles",[]))
-    ]
+    supervisors = [u for u in users if any(t.lower()=="supervisor" for t in u.get("titles",[]))]
     return render_template("group_chat_manager.html",
                            groups=groups,
                            supervisors=supervisors,
                            users=users)
 
+# alias endpoint name 'chats' (for templates that link to it)
+@app.route("/chats")
+@manager_required
+def chats():
+    return redirect(url_for("group_chat_manager"))
+
 @app.route("/groups/add", methods=["POST"])
-@login_required
+@manager_required
 def add_group():
-    if session.get("role")!="manager":
-        return redirect(url_for("group_chat_manager"))
     name = request.form.get("group_name","").strip()
     sup  = request.form.get("supervisor","").strip().lower()
     if not name or not sup:
@@ -743,16 +733,17 @@ def add_group():
 @login_required
 def view_group(group_id):
     user = session["username"]
+    role = session.get("role","member")
     gs   = load_groups()
     grp  = next((g for g in gs if g["id"]==group_id), None)
-    if not grp or (session.get("role")!="manager" and user not in grp.get("members",[])):
+    if not grp or (role!="manager" and user not in grp.get("members",[])):
         return redirect(url_for("group_chat_manager"))
 
     tasks    = load_group_tasks().get(group_id,[])
     messages = load_group_messages().get(group_id,[])
     users    = load_users()
 
-    # mark this group as read for current user (last seen timestamp)
+    # mark read
     seen_map = load_group_seen()
     user_seen = seen_map.setdefault(user, {})
     if messages:
@@ -790,15 +781,42 @@ def groups_mark_all_read():
 @login_required
 def post_group_message(group_id):
     text = request.form.get("message","").strip()
-    if text:
-        msgs = load_group_messages()
-        ch   = msgs.setdefault(group_id,[])
-        ch.append({
-            "sender": session["username"],
-            "timestamp": datetime.now().isoformat(timespec="minutes"),
-            "text": text
-        })
-        save_group_messages(msgs)
+    img  = request.files.get("image")
+
+    # membership (managers can always post)
+    user = session["username"]
+    role = session.get("role","member")
+    group = next((g for g in load_groups() if g["id"] == group_id), None)
+    if not group or (role != "manager" and user not in group.get("members", [])):
+        flash("Not authorized.")
+        return redirect(url_for("group_chat_manager"))
+
+    if not text and not (img and img.filename):
+        flash("Type a message or attach an image.")
+        return redirect(url_for("view_group", group_id=group_id))
+
+    image_filename = None
+    if img and img.filename and allowed_file(img.filename):
+        safe = secure_filename(f"{uuid.uuid4()}_{img.filename}")
+        img.save(os.path.join(app.config["UPLOAD_FOLDER"], safe))
+        image_filename = safe
+
+    msgs = load_group_messages()
+    channel = msgs.setdefault(group_id, [])
+    channel.append({
+        "sender": user,
+        "timestamp": datetime.now().isoformat(timespec="minutes"),
+        "text": text,
+        "image": image_filename,
+        "pinned": False
+    })
+    save_group_messages(msgs)
+
+    # mark sender as read
+    seen_map = load_group_seen()
+    seen_map.setdefault(user, {})[group_id] = channel[-1]["timestamp"]
+    save_group_seen(seen_map)
+
     return redirect(url_for("view_group", group_id=group_id))
 
 @app.route("/groups/<group_id>/pin/<int:idx>", methods=["POST"])
@@ -822,11 +840,32 @@ def pin_message(group_id, idx):
         flash("Pinned" if lst[idx]["pinned"] else "Unpinned")
     return redirect(url_for("view_group", group_id=group_id))
 
-@app.route("/groups/<group_id>/add_member", methods=["POST"])
+@app.route("/groups/<group_id>/delete/<int:idx>", methods=["POST"])
 @login_required
+def delete_message(group_id, idx):
+    user = session["username"]
+    role = session.get("role","member")
+
+    groups = load_groups()
+    grp = next((g for g in groups if g["id"] == group_id), None)
+    if not grp:
+        abort(404)
+
+    msgs = load_group_messages()
+    lst = msgs.get(group_id, [])
+    if 0 <= idx < len(lst):
+        can_delete = (role == "manager") or (user == lst[idx]["sender"])
+        if not can_delete:
+            flash("You can only delete your messages.")
+            return redirect(url_for("view_group", group_id=group_id))
+        lst.pop(idx)
+        save_group_messages(msgs)
+        flash("Message deleted.")
+    return redirect(url_for("view_group", group_id=group_id))
+
+@app.route("/groups/<group_id>/add_member", methods=["POST"])
+@manager_required
 def add_group_member(group_id):
-    if session.get("role")!="manager":
-        return redirect(url_for("group_chat_manager"))
     gs = load_groups()
     grp = next((g for g in gs if g["id"]==group_id), None)
     if grp:
@@ -838,10 +877,8 @@ def add_group_member(group_id):
     return redirect(url_for("view_group",group_id=group_id))
 
 @app.route("/groups/<group_id>/remove_member", methods=["POST"])
-@login_required
+@manager_required
 def remove_group_member(group_id):
-    if session.get("role")!="manager":
-        return redirect(url_for("group_chat_manager"))
     gs = load_groups()
     grp = next((g for g in gs if g["id"]==group_id), None)
     if grp:
@@ -862,6 +899,14 @@ def add_group_task(group_id):
         flash("Task text required.")
         return redirect(url_for("view_group",group_id=group_id))
 
+    # members or managers only
+    user = session["username"]
+    role = session.get("role","member")
+    grp  = next((g for g in load_groups() if g["id"]==group_id), None)
+    if not grp or (role!="manager" and user not in grp.get("members",[])):
+        flash("Not authorized.")
+        return redirect(url_for("group_chat_manager"))
+
     gts = load_group_tasks()
     ch  = gts.setdefault(group_id,[])
     ch.append({
@@ -870,7 +915,7 @@ def add_group_task(group_id):
         "recurring": "weekly",
         "notes": notes,
         "done": False,
-        "created_by": session["username"],
+        "created_by": user,
         "created_at": datetime.now().isoformat(timespec="minutes")
     })
     save_group_tasks(gts)
@@ -919,5 +964,6 @@ def toggle_group_task(group_id, idx):
     flash("Status updated.")
     return redirect(url_for("view_group",group_id=group_id))
 
+# ─────────────────────────────── Run ───────────────────────────────
 if __name__ == "__main__":
     app.run(debug=True)
