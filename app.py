@@ -652,28 +652,66 @@ def task_events():
     return jsonify(evts)
 
 # ─────────────────────────────── Settings ───────────────────────────────
+# ─────────────────────────────── Settings ───────────────────────────────
 @app.route("/settings", methods=["GET"])
 @login_required
 def settings():
     user = session["username"]
+
+    # load prefs (with defaults)
     prefs_all = load_prefs()
-    prefs = prefs_all.get(user, {"theme":"light","density":"comfortable","calendar_scope":"my","notify_sound":False})
-    return render_template("settings.html", prefs=prefs)
+    prefs = prefs_all.get(user, {
+        "theme": "light",
+        "density": "comfortable",
+        "calendar_scope": "my",
+        "notify_sound": False
+    })
+
+    # load the user's current display name
+    users = load_users()
+    urec = next((u for u in users if u["username"] == user), None)
+    effective_display = (urec.get("display_name") if urec and urec.get("display_name")
+                         else user.title())
+
+    # build my_prefs for the template (what your settings.html expects)
+    my_prefs = dict(prefs)
+    my_prefs.setdefault("display_name", effective_display)
+
+    return render_template(
+        "settings.html",
+        prefs=prefs,                    # keep for backward compatibility
+        my_prefs=my_prefs,              # what the template uses: my_prefs.*
+        effective_display=effective_display
+    )
 
 @app.route("/settings/update", methods=["POST"])
 @login_required
 def settings_update():
     user = session["username"]
+
+    # 1) Save preferences
     prefs_all = load_prefs()
     prefs = prefs_all.get(user, {})
-    prefs["theme"] = request.form.get("theme","light")
-    prefs["density"] = request.form.get("density","comfortable")
-    prefs["calendar_scope"] = request.form.get("calendar_scope","my")
+    prefs["theme"] = request.form.get("theme", "light")
+    prefs["density"] = request.form.get("density", "comfortable")
+    prefs["calendar_scope"] = request.form.get("calendar_scope", "my")
     prefs["notify_sound"] = bool(request.form.get("notify_sound"))
     prefs_all[user] = prefs
     save_prefs(prefs_all)
+
+    # 2) Optionally update user's display_name
+    new_display = request.form.get("display_name", "").strip()
+    if new_display:
+        users = load_users()
+        for u in users:
+            if u["username"] == user:
+                u["display_name"] = new_display
+                break
+        save_users(users)
+
     flash("Settings saved.")
     return redirect(url_for("settings"))
+
 
 # ─────────────────────────────── Overdue ───────────────────────────────
 @app.route("/overdue")
