@@ -25,6 +25,7 @@ GROUP_SEEN_FILE      = "group_seen.json"
 
 REMINDERS_FILE       = "reminders.json"
 PREFERENCES_FILE     = "preferences.json"
+PASSWORD_RESETS_FILE = "password_resets.json"   # NEW: forgot/reset flow
 
 UPLOAD_FOLDER        = "static/uploads"
 ALLOWED_EXTS         = {"png","jpg","jpeg","gif"}
@@ -102,6 +103,9 @@ def save_reminders(items):    save_json(REMINDERS_FILE, items)
 def load_prefs():             return load_json(PREFERENCES_FILE, {})
 def save_prefs(p):            save_json(PREFERENCES_FILE, p)
 
+def load_resets():            return load_json(PASSWORD_RESETS_FILE, {})
+def save_resets(data):        save_json(PASSWORD_RESETS_FILE, data)
+
 # ─────────────────────────────── Jinja filters ───────────────────────────────
 @app.template_filter('format_datetime')
 def format_datetime(value):
@@ -157,11 +161,79 @@ def login():
 
 @app.route("/logout")
 def logout():
+    # The "Are you sure?" confirmation is implemented in templates via onclick confirm()
     session.clear()
     flash("You have been logged out.")
     return redirect(url_for("login"))
 
-# ─────────────────────────────── Home / Dashboard ───────────────────────────────
+# ─────────────────────────────── Forgot / Reset Password ─────────────────────
+@app.route("/forgot", methods=["GET", "POST"])
+def forgot():
+    if request.method == "POST":
+        uname = request.form.get("username", "").strip().lower()
+        users = load_users()
+        user = next((u for u in users if u["username"] == uname), None)
+
+        # Always pretend success to avoid user enumeration
+        if not user:
+            flash("If that account exists, a reset link was created.")
+            return render_template("forgot_sent.html", reset_url=None)
+
+        tok = uuid.uuid4().hex
+        expires = (datetime.now() + timedelta(minutes=60)).isoformat(timespec="minutes")
+        resets = load_resets()
+        resets[tok] = {"username": uname, "expires": expires}
+        save_resets(resets)
+
+        reset_url = url_for("reset_password", token=tok, _external=False)
+        flash("Use the link below to reset your password.")
+        return render_template("forgot_sent.html", reset_url=reset_url)
+
+    return render_template("forgot.html")
+
+@app.route("/reset/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    resets = load_resets()
+    rec = resets.get(token)
+    if not rec:
+        flash("Invalid or expired reset link.")
+        return redirect(url_for("login"))
+
+    try:
+        exp = datetime.fromisoformat(rec["expires"])
+        if datetime.now() > exp:
+            resets.pop(token, None)
+            save_resets(resets)
+            flash("Reset link has expired.")
+            return redirect(url_for("forgot"))
+    except Exception:
+        # If expiry parse fails, allow but overwrite on save below
+        pass
+
+    if request.method == "POST":
+        pw1 = request.form.get("password", "")
+        pw2 = request.form.get("password2", "")
+        if not pw1 or pw1 != pw2:
+            flash("Passwords must match.")
+            return render_template("reset.html", token=token)
+
+        users = load_users()
+        uname = rec["username"]
+        for u in users:
+            if u["username"] == uname:
+                u["password"] = generate_password_hash(pw1)
+                break
+        save_users(users)
+
+        resets.pop(token, None)
+        save_resets(resets)
+
+        flash("Password updated. Please log in.")
+        return redirect(url_for("login"))
+
+    return render_template("reset.html", token=token)
+
+# ─────────────────────────────── Home / Dashboard ─────────────────────────────
 @app.route("/")
 @login_required
 def index():
@@ -336,7 +408,7 @@ def search():
                            msg_hits=msg_hits,
                            user_hits=user_hits)
 
-# ─────────────────────────────── Task CRUD / Manager Pages ───────────────────────────────
+# ─────────────────────────────── Task CRUD / Manager Pages ───────────────────
 @app.route("/add", methods=["POST"])
 @login_required
 def add():
@@ -442,15 +514,11 @@ def edit(task_id):
     return redirect(url_for("tasks_page"))
 
 @app.route("/tasks")
-@login_required
+@manager_required
 def tasks_page():
-    username = session["username"]
-    role     = session.get("role","member")
+    # Managers only view (sidebar for managers shows this link)
     sort_by  = request.args.get("sort","due_asc")
-
     ts = load_tasks()
-    if role!="manager":
-        ts = [t for t in ts if t.get("assigned_to","").lower()==username.lower()]
 
     if sort_by=="completed":
         ts = [t for t in ts if t.get("done")]
@@ -473,15 +541,13 @@ def tasks_page():
 
     return render_template("task_manager.html",
                            tasks=ts,
-                           role=role,
+                           role="manager",
                            sort_by=sort_by,
                            assignable_users=assignable)
 
 @app.route("/tasks/create", methods=["GET","POST"])
-@login_required
+@manager_required
 def create_task_page():
-    if session.get("role")!="manager":
-        return redirect(url_for("tasks_page"))
     if request.method=="POST":
         return redirect(url_for("add"))
     users = load_users()
@@ -652,7 +718,6 @@ def task_events():
     return jsonify(evts)
 
 # ─────────────────────────────── Settings ───────────────────────────────
-# ─────────────────────────────── Settings ───────────────────────────────
 @app.route("/settings", methods=["GET"])
 @login_required
 def settings():
@@ -679,7 +744,7 @@ def settings():
 
     return render_template(
         "settings.html",
-        prefs=prefs,                    # keep for backward compatibility
+        prefs=prefs,                    # backward compatibility
         my_prefs=my_prefs,              # what the template uses: my_prefs.*
         effective_display=effective_display
     )
@@ -711,7 +776,6 @@ def settings_update():
 
     flash("Settings saved.")
     return redirect(url_for("settings"))
-
 
 # ─────────────────────────────── Overdue ───────────────────────────────
 @app.route("/overdue")
@@ -747,25 +811,39 @@ def group_chat_manager():
                            supervisors=supervisors,
                            users=users)
 
-# alias endpoint name 'chats' (for templates that link to it)
+# Member-facing chats hub (non-managers list only their groups)
 @app.route("/chats")
-@manager_required
+@login_required
 def chats():
-    return redirect(url_for("group_chat_manager"))
-
-@app.route("/groups/add", methods=["POST"])
-@manager_required
-def add_group():
-    name = request.form.get("group_name","").strip()
-    sup  = request.form.get("supervisor","").strip().lower()
-    if not name or not sup:
-        flash("Both name & supervisor required.")
+    user = session["username"]
+    role = session.get("role", "member")
+    if role == "manager":
+        # Managers manage chats in the admin view
         return redirect(url_for("group_chat_manager"))
-    gs = load_groups()
-    new = {"id":str(uuid.uuid4()),"name":name,"supervisor":sup,"members":[sup]}
-    gs.append(new); save_groups(gs)
-    flash("Group created.")
-    return redirect(url_for("group_chat_manager"))
+
+    groups = load_groups()
+    msgs_by_group = load_group_messages()
+    seen_map = load_group_seen().get(user, {})
+
+    my_groups = [g for g in groups if user in g.get("members", [])]
+    cards = []
+    for g in my_groups:
+        gid = g["id"]
+        lst = msgs_by_group.get(gid, [])
+        last_msg = lst[-1] if lst else None
+        last_seen = seen_map.get(gid, "1970-01-01T00:00")
+        unread = sum(1 for m in lst if m.get("timestamp","") > last_seen)
+        cards.append({
+            "id": gid,
+            "name": g.get("name", "Group"),
+            "unread": unread,
+            "last": last_msg
+        })
+
+    def _ts(c): return c["last"]["timestamp"] if c["last"] else ""
+    cards.sort(key=lambda c: (_ts(c), c["unread"]), reverse=True)
+
+    return render_template("my_chats.html", cards=cards)
 
 @app.route("/groups/<group_id>")
 @login_required
@@ -775,7 +853,8 @@ def view_group(group_id):
     gs   = load_groups()
     grp  = next((g for g in gs if g["id"]==group_id), None)
     if not grp or (role!="manager" and user not in grp.get("members",[])):
-        return redirect(url_for("group_chat_manager"))
+        # Non-members/managers: bounce to the appropriate hub
+        return redirect(url_for("group_chat_manager" if role=="manager" else "chats"))
 
     tasks    = load_group_tasks().get(group_id,[])
     messages = load_group_messages().get(group_id,[])
