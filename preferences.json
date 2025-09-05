@@ -1,0 +1,8 @@
+{
+  "jeremy": {
+    "theme": "dark",
+    "density": "compact",
+    "calendar_scope": "my",
+    "notify_sound": false
+  }
+}

@@ -1,120 +1,207 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>{{ group.name }} – Group Chat</title>
+  <title>{{ group.name }} · Group Chat</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .chat-wrap { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+    .messages { background: #fff; border-radius: 10px; padding: 12px; }
+    .message { padding: 10px 12px; border-radius: 8px; margin: 8px 0; background: #f6f9fc; }
+    .msg-head { display:flex; gap:8px; align-items: baseline; }
+    .msg-sender { font-weight: 600; color:#222; }
+    .msg-time { font-size: .85rem; opacity:.65; }
+    .msg-pinned { font-size: .75rem; color:#a86f00; background:#fff3cd; border-radius: 999px; padding:2px 8px; margin-left: 8px; }
+    .msg-img { display:block; margin-top:8px; max-width: 100%; border-radius: 8px; }
+    .task { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:#f6f9fc; border-radius:8px; margin-bottom:8px; }
+    .task .meta { font-size:.9rem; opacity:.85; }
+    .member-tools { background:#fff; border-radius:10px; padding:12px; }
+    .pin-btn, .del-btn { background:none; border:none; cursor:pointer; text-decoration: underline; font-size:.9rem; padding:0; }
+    .pin-btn { color:#7a5b00; }
+    .del-btn { color:#a30000; }
+    .msg-actions { margin-top:6px; }
+    .compose { background:#fff; border-radius:10px; padding:12px; margin-top:10px; }
+    .pill { display:inline-block; border-radius:999px; padding:2px 8px; font-size:.75rem; background:#eef4ff; color:#2a4b8d; }
+  </style>
 </head>
 <body>
-
   <div class="sidebar">
     <h2>Menu</h2>
     <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
     <a href="{{ url_for('calendar_view') }}">Calendar</a>
     <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+
+    {% if current_role == 'manager' %}
+      <a class="active" href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
+      <a href="{{ url_for('view_shifts') }}">Shifts</a>
+    {% else %}
+      <a class="active" href="{{ url_for('chats') }}">Group Chats</a>
+    {% endif %}
+
     <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}">Logout</a>
+    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
   </div>
 
-  <div class="main-content">
-    <div class="container">
-      <h1>{{ group.name }}</h1>
+  <div class="main-content container">
+    <h1>{{ group.name }}</h1>
+    <p class="muted">Lead: <span class="pill">{{ group.supervisor|capitalize }}</span> · Members: {{ group.members|length }}</p>
 
-      {% set sup = users | selectattr("username","equalto", group.supervisor) | list | first %}
-      <p><em>Supervisor:</em> {{ sup.display_name if sup else group.supervisor|capitalize }}</p>
-
-      <!-- Pinned messages -->
-      {% set can_pin = (session.get('role') == 'manager' or session['username'] == group.supervisor) %}
-      {% set pinned = messages | selectattr('pinned') | list %}
-      {% if pinned %}
-        <div class="pinned-box">
-          <h3>Pinned</h3>
-          {% for m in pinned %}
-            <div class="message pinned">
-              <div>
-                <strong>
-                  {% set sender = users | selectattr('username','equalto',m.sender) | list | first %}
-                  {{ sender.display_name if sender else m.sender|capitalize }}
-                </strong>
-                <small>{{ m.timestamp|replace("T"," ") }}</small>
-              </div>
-              <p>{{ m.text }}</p>
-            </div>
-          {% endfor %}
+    {% with msgs = get_flashed_messages() %}
+      {% if msgs %}
+        <div class="flash-area">
+          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
         </div>
       {% endif %}
+    {% endwith %}
 
-      <!-- Chat window -->
-      <section class="chat-box">
-        <h2>Chat</h2>
+    <div class="chat-wrap">
+      <!-- Messages -->
+      <div>
         <div class="messages">
-          {% for m in messages %}
-            <div class="message">
-              <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-                <div>
-                  <strong>
-                    {% set sender = users | selectattr('username','equalto',m.sender) | list | first %}
-                    {{ sender.display_name if sender else m.sender|capitalize }}
-                  </strong>
-                  <small>{{ m.timestamp|replace("T"," ") }}</small>
+          {% if messages and messages|length > 0 %}
+            {% for m in messages %}
+              {% set results = users|selectattr("username","equalto", m.sender)|list %}
+              {% set u = results[0] if results and results|length > 0 else None %}
+              {% set display = (u.display_name if u and u.display_name else m.sender|capitalize) %}
+
+              <div class="message">
+                <div class="msg-head">
+                  <span class="msg-sender">{{ display }}</span>
+                  <span class="msg-time">{{ m.timestamp|format_datetime }}</span>
+                  {% if m.pinned %}<span class="msg-pinned">Pinned</span>{% endif %}
                 </div>
-                {% if can_pin %}
-                  <form method="post" action="{{ url_for('pin_message', group_id=group.id, idx=loop.index0) }}">
-                    <button type="submit" class="link-button">{{ 'Unpin' if m.pinned else 'Pin' }}</button>
-                  </form>
+                {% if m.text %}
+                  <div class="msg-text">{{ m.text }}</div>
                 {% endif %}
+                {% if m.image %}
+                  <img class="msg-img" src="{{ url_for('static', filename='uploads/' ~ m.image) }}" alt="attachment">
+                {% endif %}
+
+                <div class="msg-actions">
+                  {% if current_role == 'manager' or current_user == group.supervisor %}
+                    <form style="display:inline" method="post" action="{{ url_for('pin_message', group_id=group.id, idx=loop.index0) }}">
+                      <button class="pin-btn" type="submit">{% if m.pinned %}Unpin{% else %}Pin{% endif %}</button>
+                    </form>
+                  {% endif %}
+
+                  {% if current_role == 'manager' or current_user == m.sender %}
+                    <form style="display:inline" method="post" action="{{ url_for('delete_message', group_id=group.id, idx=loop.index0) }}">
+                      <button class="del-btn" type="submit">Delete</button>
+                    </form>
+                  {% endif %}
+                </div>
               </div>
-              <p>{{ m.text }}</p>
-            </div>
+            {% endfor %}
           {% else %}
-            <p class="empty-state">No messages yet.</p>
-          {% endfor %}
+            <p class="muted">No messages yet.</p>
+          {% endif %}
         </div>
 
-        <form method="post" action="{{ url_for('post_group_message', group_id=group.id) }}">
-          <textarea name="message" placeholder="Type a message…" required></textarea>
-          <button type="submit">Send</button>
+        <form class="compose" method="post" action="{{ url_for('post_group_message', group_id=group.id) }}" enctype="multipart/form-data">
+          <h3>New Message</h3>
+          <div class="form-row">
+            <label for="message">Message</label>
+            <textarea id="message" name="message" rows="2" placeholder="Type a message..."></textarea>
+          </div>
+          <div class="form-row">
+            <label for="image">Attach image (optional)</label>
+            <input type="file" id="image" name="image" accept=".png,.jpg,.jpeg,.gif">
+          </div>
+          <div class="actions">
+            <button type="submit">Send</button>
+          </div>
         </form>
-      </section>
+      </div>
 
-      <!-- Weekly tasks -->
-      <section class="task-panel" style="margin-top:24px;">
-        <h2>Weekly Tasks</h2>
-        <ul class="task-list">
-          {% for t in tasks %}
-            <li class="task-item">
-              <form method="post" action="{{ url_for('toggle_group_task', group_id=group.id, idx=loop.index0) }}" style="display:inline">
-                <input type="checkbox" onchange="this.form.submit()" {% if t.done %}checked{% endif %}>
-              </form>
-              {{ t.text }} <small>({{ t.priority }})</small>
-              {% if t.completed_at %}
-                <small>— Done {{ t.completed_at|replace("T"," ") }}</small>
-              {% endif %}
-              {% if t.photo %}
-                <div><img src="{{ url_for('static', filename='uploads/' ~ t.photo) }}" alt="Proof" style="max-width:200px; border-radius:8px; margin-top:6px;"></div>
-              {% endif %}
-            </li>
+      <!-- Sidebar: members & tasks -->
+      <div>
+        {% if current_role == 'manager' %}
+          <div class="member-tools">
+            <h3>Members</h3>
+            {% if group.members and group.members|length > 0 %}
+              <ul class="list">
+                {% for m in group.members %}
+                  <li class="list-row">
+                    <div class="title">{{ m|capitalize }}</div>
+                    {% if m != group.supervisor %}
+                      <form method="post" action="{{ url_for('remove_group_member', group_id=group.id) }}">
+                        <input type="hidden" name="member" value="{{ m }}">
+                        <button class="button-small danger" type="submit">Remove</button>
+                      </form>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted">No members yet.</p>
+            {% endif %}
+
+            <form class="add-form" method="post" action="{{ url_for('add_group_member', group_id=group.id) }}">
+              <label for="member">Add member (username)</label>
+              <input type="text" id="member" name="member" placeholder="username" required>
+              <button type="submit">Add</button>
+            </form>
+          </div>
+        {% endif %}
+
+        <div class="card" style="margin-top:12px;">
+          <h3>Group Tasks</h3>
+          {% if tasks and tasks|length > 0 %}
+            <ul class="list">
+              {% for t in tasks %}
+                <li class="task">
+                  <div>
+                    <div class="title">{% if t.done %}<s>{{ t.text }}</s>{% else %}{{ t.text }}{% endif %}</div>
+                    <div class="meta">
+                      Priority: {{ t.priority }}{% if t.completed_by %} · Completed by {{ t.completed_by|capitalize }}{% endif %}
+                    </div>
+                  </div>
+                  <div>
+                    <form method="post" action="{{ url_for('toggle_group_task', group_id=group.id, idx=loop.index0) }}" enctype="multipart/form-data">
+                      {% if not t.done %}
+                        <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif">
+                      {% endif %}
+                      <button class="button-small" type="submit">
+                        {% if t.done %}Undo{% else %}Complete{% endif %}
+                      </button>
+                    </form>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
           {% else %}
-            <li class="empty-state">No tasks yet.</li>
-          {% endfor %}
-        </ul>
+            <p class="muted">No tasks yet.</p>
+          {% endif %}
 
-        <form method="post" action="{{ url_for('add_group_task', group_id=group.id) }}">
-          <input type="text" name="text" placeholder="New weekly task" required>
-          <select name="priority">
-            <option>Low</option>
-            <option selected>Medium</option>
-            <option>High</option>
-          </select>
-          <textarea name="notes" placeholder="Optional notes…"></textarea>
-          <button type="submit">Add Task</button>
-        </form>
-      </section>
+          <form class="add-form" method="post" action="{{ url_for('add_group_task', group_id=group.id) }}">
+            <label for="t_text">New Task</label>
+            <input type="text" id="t_text" name="text" placeholder="Task description" required>
 
+            <label for="t_priority">Priority</label>
+            <select id="t_priority" name="priority">
+              <option>Medium</option>
+              <option>High</option>
+              <option>Low</option>
+            </select>
+
+            <label for="t_notes">Notes</label>
+            <textarea id="t_notes" name="notes" rows="2" placeholder="Optional notes..."></textarea>
+
+            <button type="submit">Add Task</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 14px;">
+      {% if current_role == 'manager' %}
+        <a class="button-secondary" href="{{ url_for('group_chat_manager') }}">Back to Chat Manager</a>
+      {% else %}
+        <a class="button-secondary" href="{{ url_for('chats') }}">Back to My Chats</a>
+      {% endif %}
     </div>
   </div>
 </body>
