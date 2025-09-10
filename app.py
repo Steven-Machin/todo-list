@@ -4,7 +4,7 @@ from flask import (
     flash, session, jsonify, abort
 )
 import json, os, uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -13,22 +13,22 @@ app = Flask(__name__)
 app.secret_key = "manager-task-secret"
 
 # ─────────────────────────────── Paths / Config ───────────────────────────────
-TASKS_FILE           = "tasks.json"
-USERS_FILE           = "users.json"
-SHIFTS_FILE          = "shifts.json"
-TITLES_FILE          = "titles.json"
+TASKS_FILE            = "tasks.json"
+USERS_FILE            = "users.json"
+SHIFTS_FILE           = "shifts.json"
+TITLES_FILE           = "titles.json"
 
-GROUPS_FILE          = "group_chats.json"
-GROUP_TASKS_FILE     = "group_tasks.json"
-GROUP_MESSAGES_FILE  = "group_messages.json"
-GROUP_SEEN_FILE      = "group_seen.json"
+GROUPS_FILE           = "group_chats.json"
+GROUP_TASKS_FILE      = "group_tasks.json"
+GROUP_MESSAGES_FILE   = "group_messages.json"
+GROUP_SEEN_FILE       = "group_seen.json"
 
-REMINDERS_FILE       = "reminders.json"
-PREFERENCES_FILE     = "preferences.json"
-PASSWORD_RESETS_FILE = "password_resets.json"   # NEW: forgot/reset flow
+REMINDERS_FILE        = "reminders.json"
+PREFERENCES_FILE      = "preferences.json"
+PASSWORD_RESETS_FILE  = "password_resets.json"   # forgot/reset flow
 
-UPLOAD_FOLDER        = "static/uploads"
-ALLOWED_EXTS         = {"png","jpg","jpeg","gif"}
+UPLOAD_FOLDER         = "static/uploads"
+ALLOWED_EXTS          = {"png","jpg","jpeg","gif"}
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -37,7 +37,11 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 def load_json(path, default):
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except Exception:
+                # corrupted file fallback
+                return default
     return default
 
 def save_json(path, data):
@@ -71,6 +75,60 @@ def inject_user_ctx():
         "current_user": session.get("username"),
         "current_role": session.get("role", "member")
     }
+
+def _norm(s):
+    return (s or "").strip().lower()
+
+def parse_date(date_str):
+    """
+    Parse just a DATE (YYYY-MM-DD) from a variety of inputs.
+    Returns date or None.
+    """
+    if not date_str:
+        return None
+    # common shapes: 'YYYY-MM-DD', 'YYYY-MM-DDTHH:MM', 'YYYY-MM-DDTHH:MM:SS'
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            return dt.date()
+        except Exception:
+            continue
+    # try isoformat() tolerant
+    try:
+        return datetime.fromisoformat(date_str).date()
+    except Exception:
+        return None
+
+def parse_date_any(date_str, default_far=True):
+    """
+    Return a datetime for sorting purposes.
+    If default_far is True and parse fails, returns a 'far future' date to push to end.
+    """
+    d = parse_date(date_str)
+    if d:
+        return datetime.combine(d, datetime.min.time())
+    return datetime(9999, 12, 31) if default_far else datetime(1900, 1, 1)
+
+def assigned_to_me(task, username, users=None):
+    """
+    True if task assignment matches current user by:
+      - task['assigned_username'] == username
+      - OR task['assigned_to'] equals user's display_name (case-insensitive)
+      - OR task['assigned_to'] equals username (legacy data)
+    """
+    if users is None:
+        users = load_users()
+    # explicit username field (new)
+    if _norm(task.get("assigned_username")) == _norm(username):
+        return True
+    assignee = _norm(task.get("assigned_to"))
+    if not assignee:
+        return False
+    if assignee == _norm(username):
+        return True
+    u = next((u for u in users if u.get("username") == username), None)
+    disp = _norm(u.get("display_name")) if u else ""
+    return bool(disp and assignee == disp)
 
 # ─────────────────────────────── JSON wrappers ───────────────────────────────
 def load_tasks():             return load_json(TASKS_FILE, [])
@@ -207,7 +265,6 @@ def reset_password(token):
             flash("Reset link has expired.")
             return redirect(url_for("forgot"))
     except Exception:
-        # If expiry parse fails, allow but overwrite on save below
         pass
 
     if request.method == "POST":
@@ -239,7 +296,7 @@ def reset_password(token):
 def index():
     username = session["username"]
     role = session.get("role","member")
-    today = datetime.today().date()
+    today = date.today()
 
     users = load_users()
     uname_to_disp = {u["username"]: u.get("display_name") or u["username"].title() for u in users}
@@ -248,18 +305,16 @@ def index():
     tasks_all = load_tasks()
     for t in tasks_all:
         d = t.get("due") or t.get("due_date")
-        try:
-            due_d = datetime.strptime(d, "%Y-%m-%d").date()
-            t["overdue"]   = (not t.get("done", False)) and (due_d < today)
-            t["due_today"] = (not t.get("done", False)) and (due_d == today)
-        except Exception:
-            t["overdue"] = False
-            t["due_today"] = False
+        due_d = parse_date(d)
+        t["overdue"]   = (due_d is not None) and (not t.get("done", False)) and (due_d < today)
+        t["due_today"] = (due_d is not None) and (not t.get("done", False)) and (due_d == today)
 
+    # visible tasks
     visible = tasks_all if role == "manager" else [
-        t for t in tasks_all if t.get("assigned_to","").lower() == username.lower()
+        t for t in tasks_all if assigned_to_me(t, username, users)
     ]
-    assignees = sorted({t["assigned_to"] for t in tasks_all if t.get("assigned_to")})
+
+    assignees = sorted({t.get("assigned_to") for t in tasks_all if t.get("assigned_to")})
 
     # group cards (latest + unread)
     groups = load_groups()
@@ -372,10 +427,10 @@ def search():
     # tasks (respect visibility)
     ts_all = load_tasks()
     if role != "manager":
-        ts_all = [t for t in ts_all if t.get("assigned_to","").lower()==user.lower() or t.get("created_by","").lower()==user.lower()]
+        ts_all = [t for t in ts_all if assigned_to_me(t, user, users) or _norm(t.get("created_by")) == _norm(user)]
     task_hits = [
         (i, t) for i, t in enumerate(ts_all)
-        if q and (q in t.get("text","").lower() or q in t.get("notes","").lower() or q in t.get("assigned_to","").lower())
+        if q and (q in (t.get("text","").lower()) or q in (t.get("notes","").lower()) or q in (t.get("assigned_to","").lower()))
     ]
 
     # groups (respect membership)
@@ -415,7 +470,7 @@ def add():
     text = request.form.get("task","").strip()
     if not text:
         flash("Task text required.")
-        return redirect(url_for("tasks_page"))
+        return redirect(url_for("tasks_page" if session.get("role")=="manager" else "index"))
 
     priority = request.form.get("priority","Medium")
     assigned_username = request.form.get("assigned_to","").strip().lower()
@@ -425,13 +480,15 @@ def add():
     created_by = session["username"]
 
     users = load_users()
-    disp = next((u["display_name"] for u in users if u["username"]==assigned_username), assigned_username.title())
+    assignee_user = next((u for u in users if _norm(u["username"]) == _norm(assigned_username)), None)
+    disp = assignee_user.get("display_name") if assignee_user else assigned_username.title()
 
     new = {
         "text": text,
         "done": False,
         "priority": priority,
-        "assigned_to": disp,
+        "assigned_to": disp,                 # display label
+        "assigned_username": assigned_username or None,  # canonical login name (may be None if added without assignee)
         "due_date": due_date,
         "recurring": recurring,
         "notes": notes,
@@ -442,76 +499,90 @@ def add():
     ts.append(new)
     save_tasks(ts)
     flash("Task added.")
-    return redirect(url_for("tasks_page"))
+    return redirect(url_for("tasks_page" if session.get("role")=="manager" else "index"))
 
 @app.route("/toggle/<int:task_id>", methods=["POST"])
 @login_required
 def toggle(task_id):
     username = session["username"]
-    role = session["role"]
+    role = session.get("role","member")
+    users = load_users()
     ts = load_tasks()
     if 0<=task_id<len(ts):
         t = ts[task_id]
-        if role=="manager" or t.get("assigned_to","").lower()==username.lower():
+        if role=="manager" or assigned_to_me(t, username, users):
             t["done"] = not t.get("done",False)
             if t["done"]:
                 t["completed_at"] = datetime.now().isoformat(timespec="minutes")
                 if t.get("recurring")=="weekly" and t.get("due_date"):
                     try:
-                        dd = datetime.strptime(t["due_date"],"%Y-%m-%d").date()
-                        nxt = dd + timedelta(weeks=1)
-                        new = {**t, "done":False, "due_date":nxt.isoformat()}
-                        new.pop("completed_at",None)
-                        ts.append(new)
+                        dd = parse_date(t.get("due_date"))
+                        if dd:
+                            nxt = dd + timedelta(weeks=1)
+                            new = {**t, "done":False, "due_date":nxt.isoformat()}
+                            new.pop("completed_at",None)
+                            ts.append(new)
                     except Exception:
                         pass
             else:
                 t.pop("completed_at",None)
     save_tasks(ts)
     flash("Task status updated.")
-    return redirect(url_for("tasks_page"))
+    return redirect(url_for("tasks_page" if role=="manager" else "index"))
 
 @app.route("/remove/<int:task_id>")
 @login_required
 def remove(task_id):
     username = session["username"]
-    role = session["role"]
+    role = session.get("role","member")
+    users = load_users()
     ts = load_tasks()
     if 0<=task_id<len(ts):
-        if role=="manager" or ts[task_id].get("assigned_to","").lower()==username.lower():
+        t = ts[task_id]
+        if role=="manager" or assigned_to_me(t, username, users):
             ts.pop(task_id)
             save_tasks(ts)
             flash("Task removed.")
-    return redirect(url_for("tasks_page"))
+        else:
+            flash("Not authorized to remove this task.")
+    return redirect(url_for("tasks_page" if role=="manager" else "index"))
 
 @app.route("/edit/<int:task_id>", methods=["GET","POST"])
 @login_required
 def edit(task_id):
     username = session["username"]
-    role = session["role"]
+    role = session.get("role","member")
+    users = load_users()
     ts = load_tasks()
 
     if request.method=="POST":
         if 0<=task_id<len(ts):
             t = ts[task_id]
-            if role=="manager" or t.get("assigned_to","").lower()==username.lower():
-                t["text"] = request.form.get("task","").strip()
+            if role=="manager" or assigned_to_me(t, username, users):
+                t["text"] = request.form.get("task","").strip() or t.get("text","")
                 t["priority"] = request.form.get("priority","Medium")
                 if role=="manager":
-                    t["assigned_to"] = request.form.get("assigned_to","").strip().title() or t.get("assigned_to")
+                    new_assigned_username = request.form.get("assigned_to","").strip().lower()
+                    assignee_user = next((u for u in users if _norm(u["username"]) == _norm(new_assigned_username)), None)
+                    if assignee_user:
+                        t["assigned_to"] = assignee_user.get("display_name") or assignee_user["username"].title()
+                        t["assigned_username"] = assignee_user["username"]
+                    elif new_assigned_username:
+                        # fallback if typed manually
+                        t["assigned_to"] = new_assigned_username.title()
+                        t["assigned_username"] = new_assigned_username
                 t["due_date"] = request.form.get("due_date","").strip()
                 t["notes"] = request.form.get("notes","").strip()
                 save_tasks(ts)
                 flash("Task updated.")
-        return redirect(url_for("tasks_page"))
+        return redirect(url_for("tasks_page" if role=="manager" else "index"))
     else:
         if 0<=task_id<len(ts):
             t = ts[task_id]
-            if role=="manager" or t.get("assigned_to","").lower()==username.lower():
-                users = load_users()
+            if role=="manager" or assigned_to_me(t, username, users):
                 assignable = [u["username"] for u in users if u.get("role")!="manager"]
                 return render_template("edit.html", task=t, task_id=task_id, assignable_users=assignable)
-    return redirect(url_for("tasks_page"))
+    return redirect(url_for("tasks_page" if role=="manager" else "index"))
 
 @app.route("/tasks")
 @manager_required
@@ -524,15 +595,16 @@ def tasks_page():
         ts = [t for t in ts if t.get("done")]
 
     def keyfn(t):
-        dd = t.get("due") or t.get("due_date") or "9999-12-31"
-        pd = {"High":0,"Medium":1,"Low":2}[t.get("priority","Medium")]
-        return {
-            "due_asc":     datetime.strptime(dd,"%Y-%m-%d"),
-            "due_desc":   -datetime.strptime(dd,"%Y-%m-%d").timestamp(),
-            "priority_hl": pd,
-            "priority_lh": -pd,
-            "completed":   datetime.fromisoformat(t.get("completed_at","9999-12-31T00:00"))
-        }[sort_by]
+        dd = t.get("due") or t.get("due_date")
+        pd_val = {"High":0,"Medium":1,"Low":2}.get(t.get("priority","Medium"), 1)
+        mapping = {
+            "due_asc":     parse_date_any(dd, default_far=True),
+            "due_desc":   -parse_date_any(dd, default_far=True).timestamp(),
+            "priority_hl": pd_val,
+            "priority_lh": -pd_val,
+            "completed":   parse_date_any(t.get("completed_at"), default_far=True)
+        }
+        return mapping[sort_by]
     ts.sort(key=keyfn)
 
     users = load_users()
@@ -583,7 +655,7 @@ def add_shift():
 @login_required
 def my_shifts():
     u = session["username"]
-    sh = [s for s in load_shifts() if s["assigned_to"].lower()==u.lower()]
+    sh = [s for s in load_shifts() if _norm(s.get("assigned_to"))==_norm(u)]
     return render_template("my_shifts.html", shifts=sh)
 
 # ─────────────────────────────── Team / Titles ───────────────────────────────
@@ -653,11 +725,12 @@ def calendar_feed():
     role  = session.get("role","member")
     show_all = (scope == "all" and role == "manager")
 
+    users = load_users()
+
     # tasks
     t_all = load_tasks()
     tasks = t_all if show_all else [
-        t for t in t_all
-        if t.get("assigned_to","").lower() == user.lower() or t.get("created_by","").lower()==user.lower()
+        t for t in t_all if assigned_to_me(t, user, users) or _norm(t.get("created_by")) == _norm(user)
     ]
 
     events = []
@@ -678,7 +751,7 @@ def calendar_feed():
 
     # shifts
     sh_all = load_shifts()
-    shifts = sh_all if show_all else [s for s in sh_all if s.get("assigned_to","").lower()==user.lower()]
+    shifts = sh_all if show_all else [s for s in sh_all if _norm(s.get("assigned_to"))==_norm(user)]
     for j, s in enumerate(shifts):
         start = s.get("date")
         if not start:
@@ -782,21 +855,25 @@ def settings_update():
 @login_required
 def overdue_tasks():
     username = session["username"]
-    role     = session.get("role","member")
-    today    = datetime.today().date()
-    ts = load_tasks()
-    if role!="manager":
-        ts=[t for t in ts if t.get("assigned_to","").lower()==username.lower()]
+    role     = session.get("role", "member")
+    today    = date.today()
 
-    overdue=[]
-    for i,t in enumerate(ts):
-        due = t.get("due") or t.get("due_date")
-        try:
-            d = datetime.strptime(due,"%Y-%m-%d").date()
-            if not t.get("done") and d<today:
-                overdue.append((i,t))
-        except Exception:
-            pass
+    users = load_users()
+    ts = load_tasks()
+
+    if role != "manager":
+        ts = [t for t in ts if assigned_to_me(t, username, users)]
+
+    overdue = []
+    for i, t in enumerate(ts):
+        due_raw = t.get("due") or t.get("due_date") or ""
+        d = parse_date(due_raw)
+        if d and not t.get("done") and d < today:
+            overdue.append((i, t))
+
+    # sort oldest first
+    overdue.sort(key=lambda pair: parse_date_any(pair[1].get("due") or pair[1].get("due_date")))
+
     return render_template("overdue.html", overdue=overdue, role=role)
 
 # ─────────────────────────────── Group Chats ───────────────────────────────
