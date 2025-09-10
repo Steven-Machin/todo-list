@@ -1,72 +1,140 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>4-Week Calendar View – To Do App</title>
+  <meta charset="UTF-8" />
+  <title>Calendar</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.4/main.min.css" rel="stylesheet">
+
+  <!-- FullCalendar v6 GLOBAL build (required for window.FullCalendar) -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+
+  <style>
+    .calendar-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; gap: 8px; flex-wrap: wrap;
+    }
+    .view-toggle { display: inline-flex; border: 1px solid #d9e1ec; border-radius: 8px; overflow: hidden; }
+    .view-toggle button { border: 0; background: #fff; padding: 8px 12px; cursor: pointer; font-weight: 600; }
+    .view-toggle button.active { background: #eef4ff; }
+    #calendar { background: #fff; border-radius: 12px; padding: 8px; box-shadow: 0 1px 2px rgba(16,24,40,.05); min-height: 600px; }
+    .legend { display:flex; align-items:center; gap:12px; font-size:.9rem; opacity:.85; }
+    .legend span { display:inline-flex; align-items:center; gap:6px; }
+    .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
+  </style>
 </head>
 <body>
   <div class="sidebar">
     <h2>Menu</h2>
     <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
-    <a href="{{ url_for('calendar_view') }}">Calendar</a>
+    <a class="active" href="{{ url_for('calendar_view') }}">Calendar</a>
     <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+    <a href="{{ url_for('chats') }}">Group Chats</a>
+
+    {% if current_role == 'manager' %}
+      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
+      <a href="{{ url_for('view_shifts') }}">Shifts</a>
+    {% endif %}
+
     <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}">Logout</a>
+    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
   </div>
 
-  <div class="main-content">
-    <h1>Calendar</h1>
-    <div class="calendar-container">
-      <div id="calendar"></div>
+  <div class="main-content container">
+    <div class="calendar-toolbar">
+      <h1 style="margin:0;">Calendar</h1>
+
+      <div class="legend">
+        <span><i class="dot" style="background:#E6492D;"></i> High Priority Task</span>
+        <span><i class="dot" style="background:#F3B43E;"></i> Medium Priority Task</span>
+        <span><i class="dot" style="background:#2FA77A;"></i> Low Priority Task</span>
+        <span><i class="dot" style="background:#4C6EF5;"></i> Shift</span>
+      </div>
+
+      {% if current_role == 'manager' %}
+      <div class="view-toggle" role="group" aria-label="Calendar scope">
+        <button id="btnMy"  class="active" type="button">My</button>
+        <button id="btnAll" type="button">All</button>
+      </div>
+      {% endif %}
     </div>
+
+    {% with msgs = get_flashed_messages() %}
+      {% if msgs %}
+        <div class="flash-area" style="margin-bottom:10px;">
+          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div id="calendar"></div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.4/index.global.min.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const calendarEl = document.getElementById('calendar');
-      const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridWeek',
-        firstDay: 0,
+    document.addEventListener('DOMContentLoaded', function () {
+      const calEl = document.getElementById('calendar');
 
-        // Row 1: just the date-range title
+      // Safety: if FullCalendar failed to load, show a message.
+      if (!window.FullCalendar) {
+        calEl.innerHTML = "<div style='padding:12px;'>FullCalendar failed to load. Check your network or CDN URL.</div>";
+        return;
+      }
+
+      let scope = 'my'; // managers can switch to 'all'
+
+      const calendar = new FullCalendar.Calendar(calEl, {
+        initialView: 'dayGridMonth',
+        height: 'auto',
         headerToolbar: {
-          left:  '',
-          center:'title',
-          right: ''
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
-
-        // Row 2: all of the buttons
-        footerToolbar: {
-          left:  'dayGridDay,dayGridWeek,dayGridMonth',
-          center:'',
-          right: 'prev,next today'
+        events: function(info, success, failure) {
+          fetch(`{{ url_for('calendar_feed') }}?scope=${scope}`)
+            .then(r => r.json())
+            .then(data => success(data))
+            .catch(err => {
+              console.error(err);
+              failure(err);
+              calEl.insertAdjacentHTML('beforeend',
+                "<div style='padding:10px;color:#b42318;'>Couldn’t load events.</div>");
+            });
         },
-
-        // keep the calendar “body” at a fixed height
-        height: 600,
-        center_width: 600,
-        
-        // you can tweak this value
-        // contentHeight: 500, // or use contentHeight instead
-
-        events: '/api/tasks/events',
-        eventClick: info => {
+        eventClick: function(info) {
           const e = info.event;
-          alert(
-            `${e.title}\nAssigned to: ${e.extendedProps.assigned_to}` +
-            (e.extendedProps.notes ? `\nNotes: ${e.extendedProps.notes}` : '')
-          );
+          const type = (e.extendedProps && e.extendedProps.type) ? e.extendedProps.type : 'event';
+          const when = e.start ? new Date(e.start).toLocaleString() : 'N/A';
+          alert(`${type.toUpperCase()}\n\n${e.title}\nWhen: ${when}`);
         }
       });
 
       calendar.render();
+
+      // Manager-only toggle (only if the buttons exist)
+      const btnMy  = document.getElementById('btnMy');
+      const btnAll = document.getElementById('btnAll');
+
+      if (btnMy && btnAll) {
+        btnMy.addEventListener('click', () => {
+          if (scope !== 'my') {
+            scope = 'my';
+            btnMy.classList.add('active');
+            btnAll.classList.remove('active');
+            calendar.refetchEvents();
+          }
+        });
+        btnAll.addEventListener('click', () => {
+          if (scope !== 'all') {
+            scope = 'all';
+            btnAll.classList.add('active');
+            btnMy.classList.remove('active');
+            calendar.refetchEvents();
+          }
+        });
+      }
     });
   </script>
 </body>
