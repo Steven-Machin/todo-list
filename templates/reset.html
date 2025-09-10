@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Reset Password</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="{{ url_for('login') }}">Back to Login</a>
+  </div>
+
+  <div class="main-content container">
+    <h1>Reset Password</h1>
+
+    {% with msgs = get_flashed_messages() %}
+      {% if msgs %}
+        <div class="flash-area">
+          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="card" method="post" action="{{ url_for('reset', token=token) }}">
+      <div class="form-row">
+        <label for="code">Reset Code</label>
+        <input type="text" id="code" name="code" required placeholder="6-digit code">
+      </div>
+
+      <div class="form-row">
+        <label for="password1">New Password</label>
+        <input type="password" id="password1" name="password1" required minlength="6">
+      </div>
+
+      <div class="form-row">
+        <label for="password2">Confirm New Password</label>
+        <input type="password" id="password2" name="password2" required minlength="6">
+      </div>
+
+      <div class="actions">
+        <button type="submit">Set New Password</button>
+        <a class="button-secondary" href="{{ url_for('login') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>
