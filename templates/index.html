@@ -2,137 +2,255 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dashboard</title>
+  <title>Home · Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* page-specific sugar */
+    .kpis { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; margin-bottom:14px; }
+    .kpi { background:#fff; border-radius:12px; padding:14px; }
+    .kpi .label { font-size:.9rem; opacity:.7; }
+    .kpi .value { font-size:1.6rem; font-weight:700; line-height:1.1; margin-top:4px; }
+    .grid-2 { display:grid; grid-template-columns: 1.5fr 1fr; gap:16px; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .searchbar { display:flex; gap:8px; }
+    .searchbar input[type="search"] { flex:1; padding:10px 12px; border-radius:8px; border:1px solid #dfe6ee; }
+    .searchbar button { white-space:nowrap; }
+    .list-plain { list-style:none; padding:0; margin:0; }
+    .list-plain > li { padding:10px 12px; border-radius:10px; background:#f6f9fc; margin-bottom:8px; }
+    .muted { opacity:.75; }
+    .button-link { background:none; border:none; color:#0d6efd; text-decoration:underline; padding:0; cursor:pointer; }
+    .subtle { background:#fafbfd; }
+    /* chips & badges pull from your stylesheet, but safe fallback here */
+    .chip { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.75rem; margin-left:6px; line-height:1.6; }
+    .chip-prio { background:#eef4ff; color:#2a4b8d; }
+    .chip-overdue { background:#ffe3e3; color:#a30000; }
+    .chip-today { background:#fff3cd; color:#7a5b00; }
+    .badge { display:inline-block; min-width:24px; padding:2px 8px; border-radius:999px; background:#007acc; color:#fff; text-align:center; font-weight:600; font-size:.75rem; }
+    /* group cards (reuse your classes) */
+    .group-cards { display:flex; flex-direction:column; gap:10px; }
+    .group-card { display:flex; align-items:center; justify-content:space-between; background:#f6f9fc; padding:12px 14px; border-radius:10px; text-decoration:none; }
+    .group-card:hover { background:#eef4f9; }
+    .group-title { font-weight:600; margin-bottom:2px; color:#222; }
+    .group-last { color:#444; font-size:.95rem; }
+    .group-last .last-text { opacity:.9; }
+    .group-last .last-time { margin-left:6px; opacity:.6; font-size:.85rem; }
+  </style>
 </head>
 <body>
-
   <div class="sidebar">
     <h2>Menu</h2>
-    <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
+    <a class="active" href="{{ url_for('index') }}">Home</a>
     <a href="{{ url_for('calendar_view') }}">Calendar</a>
     <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+
+    {% if current_role == 'manager' %}
+      <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
+      <a href="{{ url_for('view_shifts') }}">Shifts</a>
+    {% else %}
+      <a href="{{ url_for('chats') }}">Group Chats</a>
+    {% endif %}
+
     <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}">Logout</a>
+    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
   </div>
 
-  <div class="main-content">
-    <div class="container">
-      <h1>Welcome</h1>
-
-      <!-- Search -->
-      <form class="search-form" action="{{ url_for('search') }}" method="get">
-        <input type="text" name="q" placeholder="Search tasks, chats, people…" required>
+  <div class="main-content container">
+    <div class="section-head" style="margin-bottom:10px;">
+      <h1 style="margin:0;">Welcome, {{ (prefs.display_name if prefs and prefs.display_name else current_user|capitalize) }}</h1>
+      <form class="searchbar" method="get" action="{{ url_for('search') }}">
+        <input type="search" name="q" placeholder="Search tasks, chats, and people…" required>
         <button type="submit">Search</button>
       </form>
+    </div>
 
-      <div class="dashboard-grid">
-        <!-- Left column: Tasks + Reminders -->
-        <div class="task-panel">
-          <h2>My Tasks</h2>
-          {% if tasks %}
-            <ul class="task-list">
-              {% for t in tasks %}
-                <li class="task-item {% if t.overdue %}overdue{% endif %}">
-                  <div class="task-header">
-                    <span class="task-text {{ 'done' if t.get('done') else '' }}">{{ t.text }}</span>
-                    <span class="chip chip-prio">{{ t.priority }}</span>
-                    {% if t.overdue %}<span class="chip chip-overdue">Overdue</span>{% endif %}
-                    {% if t.due_today %}<span class="chip chip-today">Due Today</span>{% endif %}
-                  </div>
-                  <div class="task-meta">
-                    {% if t.assigned_to %}<span>Assigned: {{ t.assigned_to }}</span>{% endif %}
-                    {% if t.due or t.due_date %}
-                      <span>Due: {{ t.due or t.due_date }}</span>
-                    {% endif %}
-                    {% if t.completed_at %}
-                      <span>Completed: {{ t.completed_at|format_datetime }}</span>
-                    {% endif %}
-                  </div>
-                  {% if t.notes %}
-                    <div class="task-notes">{{ t.notes }}</div>
-                  {% endif %}
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p class="empty-state">No tasks to show.</p>
+    {% with msgs = get_flashed_messages() %}
+      {% if msgs %}
+        <div class="flash-area" style="margin-bottom:10px;">
+          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- KPIs -->
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">Overdue</div>
+        <div class="value">{{ (tasks|selectattr('overdue')|list)|length }}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Due Today</div>
+        <div class="value">{{ (tasks|selectattr('due_today')|list)|length }}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Unread Messages</div>
+        <div class="value">{{ group_cards|sum(attribute='unread') if group_cards else 0 }}</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Left: Latest Chats -->
+      <div class="card">
+        <div class="section-head">
+          <h2 style="margin:0;">Latest Chats</h2>
+          {% if group_cards and (group_cards|sum(attribute='unread')) > 0 %}
+            <form method="post" action="{{ url_for('groups_mark_all_read') }}">
+              <button class="button-secondary" type="submit">Mark All Read</button>
+            </form>
           {% endif %}
+        </div>
 
-          <!-- Reminders -->
-          <h2 style="margin-top:28px;">Reminders</h2>
+        {% if group_cards and group_cards|length > 0 %}
+          <div class="group-cards">
+            {% for g in group_cards[:5] %}
+              <a class="group-card" href="{{ url_for('view_group', group_id=g.id) }}">
+                <div>
+                  <div class="group-title">{{ g.name }}</div>
+                  {% if g.last %}
+                    <div class="group-last">
+                      <span class="last-sender">{{ g.last_sender_display }}</span>:
+                      <span class="last-text">{{ g.last.text }}</span>
+                      <span class="last-time">· {{ g.last.timestamp|format_datetime }}</span>
+                    </div>
+                  {% else %}
+                    <div class="group-last"><em>No messages yet</em></div>
+                  {% endif %}
+                </div>
+                {% if g.unread and g.unread > 0 %}
+                  <span class="badge" title="{{ g.unread }} unread">{{ g.unread }}</span>
+                {% endif %}
+              </a>
+            {% endfor %}
+          </div>
+          <div style="margin-top:10px;">
+            {% if current_role == 'manager' %}
+              <a class="button-secondary" href="{{ url_for('group_chat_manager') }}">View All Chats</a>
+            {% else %}
+              <a class="button-secondary" href="{{ url_for('chats') }}">View All Chats</a>
+            {% endif %}
+          </div>
+        {% else %}
+          <p class="muted">No groups or messages yet.</p>
+        {% endif %}
+      </div>
 
-          <form class="add-form" method="post" action="{{ url_for('add_reminder') }}">
-            <input type="text" name="text" placeholder="Reminder…" required>
-            <input type="datetime-local" name="due_at">
-            <button type="submit">Add</button>
-          </form>
+      <!-- Right: Reminders -->
+      <div class="card">
+        <div class="section-head">
+          <h2 style="margin:0;">Personal Reminders</h2>
+        </div>
 
-          {% if reminders %}
-            <ul class="task-list">
-              {% for r in reminders %}
-                <li class="task-item">
-                  <div class="task-header">
-                    <span class="task-text {{ 'done' if r.done else '' }}">{{ r.text }}</span>
-                    {% if r.is_due %}<span class="chip chip-overdue">Due</span>{% endif %}
-                  </div>
-                  <div class="task-meta">
-                    <span>{{ r.nice }}</span>
-                    <div class="task-actions">
-                      <form method="post" action="{{ url_for('reminders_toggle', rid=r.id) }}" style="display:inline">
-                        <button type="submit" class="link-button">{{ 'Undo' if r.done else 'Done' }}</button>
-                      </form>
-                      <form method="post" action="{{ url_for('reminders_delete', rid=r.id) }}" style="display:inline">
-                        <button type="submit" class="link-button">Delete</button>
-                      </form>
+        <form class="add-form" method="post" action="{{ url_for('add_reminder') }}">
+          <label for="r_text">Reminder</label>
+          <input type="text" id="r_text" name="text" placeholder="What do you want to remember?" required>
+
+          <label for="r_due">When (optional)</label>
+          <input type="datetime-local" id="r_due" name="due_at">
+
+          <button type="submit">Add Reminder</button>
+        </form>
+
+        {% if reminders and reminders|length > 0 %}
+          <ul class="list-plain" style="margin-top:10px;">
+            {% for r in reminders %}
+              <li>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px;">
+                  <div>
+                    <div style="font-weight:600;">
+                      {% if r.done %}<s>{{ r.text }}</s>{% else %}{{ r.text }}{% endif %}
+                    </div>
+                    <div class="muted">
+                      {% if r.nice %}{{ r.nice }}{% else %}No time{% endif %}
+                      {% if r.is_due and not r.done %}<span class="chip chip-overdue">due</span>{% endif %}
+                      {% if r.done %}<span class="chip chip-prio">done</span>{% endif %}
                     </div>
                   </div>
+                  <div style="display:flex; gap:8px;">
+                    <form method="post" action="{{ url_for('reminders_toggle', rid=r.id) }}">
+                      <button class="button-secondary" type="submit">{{ 'Undo' if r.done else 'Done' }}</button>
+                    </form>
+                    <form method="post" action="{{ url_for('reminders_delete', rid=r.id) }}" onsubmit="return confirm('Delete this reminder?');">
+                      <button class="button-secondary danger" type="submit">Delete</button>
+                    </form>
+                  </div>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted" style="margin-top:8px;">No reminders yet.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Tasks snapshot -->
+    <div class="card subtle" style="margin-top:16px;">
+      <div class="section-head">
+        <h2 style="margin:0;">Your Tasks</h2>
+        {% if current_role == 'manager' %}
+          <a class="button-secondary" href="{{ url_for('tasks_page') }}">Open Task Manager</a>
+        {% else %}
+          <a class="button-secondary" href="{{ url_for('tasks_page') }}">View All</a>
+        {% endif %}
+      </div>
+
+      {% set overdue = tasks|selectattr('overdue')|list %}
+      {% set today   = tasks|selectattr('due_today')|list %}
+      {% set upcoming = tasks|rejectattr('overdue')|rejectattr('due_today')|selectattr('done','equalto',False)|list %}
+
+      <div class="grid-2" style="grid-template-columns: 1fr 1fr;">
+        <div>
+          <h3>Overdue</h3>
+          {% if overdue and overdue|length > 0 %}
+            <ul class="list-plain">
+              {% for t in overdue[:5] %}
+                <li>
+                  <div style="font-weight:600;">{{ t.text }} <span class="chip chip-overdue">overdue</span></div>
+                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} · Due {{ (t.due or t.due_date) }}{% endif %}</div>
                 </li>
               {% endfor %}
             </ul>
           {% else %}
-            <p class="empty-state">No reminders yet.</p>
+            <p class="muted">No overdue tasks. 🎉</p>
           {% endif %}
         </div>
 
-        <!-- Right column: Group chats -->
-        <div class="shift-preview">
-          <div class="header-row">
-            <h2>Latest Group Chats</h2>
-            <form method="post" action="{{ url_for('groups_mark_all_read') }}">
-              <button type="submit" class="link-button">Mark all read</button>
-            </form>
-          </div>
-
-          {% if group_cards %}
-            <div class="group-cards">
-              {% for g in group_cards %}
-                <a class="group-card" href="{{ url_for('view_group', group_id=g.id) }}">
-                  <div>
-                    <div class="group-title">{{ g.name }}</div>
-                    {% if g.last %}
-                      <div class="group-last">
-                        <span class="last-text"><strong>{{ g.last_sender_display }}</strong>: {{ g.last.text }}</span>
-                        <span class="last-time">· {{ g.last.timestamp|replace("T"," ") }}</span>
-                      </div>
-                    {% else %}
-                      <div class="group-last"><em>No messages yet</em></div>
-                    {% endif %}
-                  </div>
-                  {% if g.unread and g.unread > 0 %}
-                    <span class="badge">{{ g.unread }}</span>
-                  {% endif %}
-                </a>
+        <div>
+          <h3>Due Today</h3>
+          {% if today and today|length > 0 %}
+            <ul class="list-plain">
+              {% for t in today[:5] %}
+                <li>
+                  <div style="font-weight:600;">{{ t.text }} <span class="chip chip-today">today</span></div>
+                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} · Due {{ (t.due or t.due_date) }}{% endif %}</div>
+                </li>
               {% endfor %}
-            </div>
+            </ul>
           {% else %}
-            <p class="empty-state">No group chats yet.</p>
+            <p class="muted">Nothing due today.</p>
           {% endif %}
         </div>
+      </div>
+
+      <div style="margin-top:8px;">
+        <h3>Upcoming</h3>
+        {% if upcoming and upcoming|length > 0 %}
+          <ul class="list-plain">
+            {% for t in upcoming[:5] %}
+              <li>
+                <div style="font-weight:600;">
+                  {{ t.text }}
+                  <span class="chip chip-prio">{{ t.priority }}</span>
+                </div>
+                <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} · Due {{ (t.due or t.due_date) }}{% endif %}</div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No upcoming tasks.</p>
+        {% endif %}
       </div>
     </div>
   </div>
