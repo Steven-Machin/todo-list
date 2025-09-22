@@ -79,25 +79,47 @@ def inject_user_ctx():
 def _norm(s):
     return (s or "").strip().lower()
 
+
+def parse_dt_any(s: str) -> datetime | None:
+    """Return a naive datetime for common ISO-like strings or None."""
+    if not s:
+        return None
+    text = s.strip()
+    if not text:
+        return None
+
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+            try:
+                dt = datetime.strptime(text, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return None
+
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt
+
+
+def iso_date(d: date) -> str:
+    return d.isoformat()
+
+
+def iso_minutes(dt: datetime) -> str:
+    return dt.replace(second=0, microsecond=0).isoformat(timespec="minutes")
+
+
 def parse_date(date_str):
     """
     Parse just a DATE (YYYY-MM-DD) from a variety of inputs.
     Returns date or None.
     """
-    if not date_str:
-        return None
-    # common shapes: 'YYYY-MM-DD', 'YYYY-MM-DDTHH:MM', 'YYYY-MM-DDTHH:MM:SS'
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            dt = datetime.strptime(date_str, fmt)
-            return dt.date()
-        except Exception:
-            continue
-    # try isoformat() tolerant
-    try:
-        return datetime.fromisoformat(date_str).date()
-    except Exception:
-        return None
+    dt = parse_dt_any(date_str)
+    return dt.date() if dt else None
 
 def parse_date_any(date_str, default_far=True):
     """
@@ -348,11 +370,11 @@ def index():
     for r in my_rem:
         dt_str = r.get("due_at")
         if dt_str:
-            try:
-                r_dt = datetime.strptime(dt_str, "%Y-%m-%dT%H:%M")
+            r_dt = parse_dt_any(dt_str)
+            if r_dt:
                 r["is_due"] = r_dt <= now
                 r["nice"] = r_dt.strftime("%b %d, %Y %I:%M %p")
-            except Exception:
+            else:
                 r["is_due"] = False
                 r["nice"] = dt_str
         else:
