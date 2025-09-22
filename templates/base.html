@@ -7,27 +7,30 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="dashboard-grid{% if session.role == 'manager' %} manager{% endif %}">
-
-    {% if session.role == 'manager' %}
-      <div class="sidebar">
-        <h2>Menu</h2>
-        <a href="/">Home</a>
-        <a href="/tasks">Task Manager</a>
-        <a href="/titles">Team Member Manager</a>
-        <a href="/calendar">Calendar</a>
-        <a href="/overdue">Overdue Tasks</a>
-        <a href="/groups">Group Chats</a>
-        <a href="/settings">Settings</a>
-        <a href="/logout">Logout</a>
-      </div>
-    {% endif %}
-
-    <div class="main-content{% if session.role != 'manager' %} full-width{% endif %}">
+  <div class="dashboard-grid{% if current_role == 'manager' %} manager{% endif %}">
+    <div class="sidebar">
+      <h2>Menu</h2>
+      <a href="{{ url_for('index') }}">Home</a>
+      {% if current_role == 'manager' %}
+      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
+      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
+      <a href="{{ url_for('title_manager') }}">Titles</a>
+      <a href="{{ url_for('view_shifts') }}">Shifts</a>
+      {% endif %}
+      <a href="{{ url_for('calendar_view') }}">Calendar</a>
+      <a href="{{ url_for('overdue_tasks') }}">Overdue</a>
+      {% if current_role == 'manager' %}
+      <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
+      {% else %}
+      <a href="{{ url_for('chats') }}">Group Chats</a>
+      {% endif %}
+      <a href="{{ url_for('settings') }}">Settings</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </div>
+    <div class="main-content">
       {% block content %}{% endblock %}
     </div>
   </div>
-
   {% block scripts %}{% endblock %}
 </body>
 </html>
