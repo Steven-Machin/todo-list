@@ -134,23 +134,23 @@ def parse_date_any(date_str, default_far=True):
 def assigned_to_me(task, username, users=None):
     """
     True if task assignment matches current user by:
-      - task['assigned_username'] == username
-      - OR task['assigned_to'] equals user's display_name (case-insensitive)
-      - OR task['assigned_to'] equals username (legacy data)
+      - task['assigned_username'] equals username (case-insensitive)
+      - OR task['assigned_to'] equals user's display_name (legacy, case-insensitive)
     """
     if users is None:
         users = load_users()
-    # explicit username field (new)
-    if _norm(task.get("assigned_username")) == _norm(username):
+
+    task_username = _norm(task.get("assigned_username"))
+    if task_username and task_username == _norm(username):
         return True
-    assignee = _norm(task.get("assigned_to"))
-    if not assignee:
+
+    assignee_display = _norm(task.get("assigned_to"))
+    if not assignee_display:
         return False
-    if assignee == _norm(username):
-        return True
-    u = next((u for u in users if u.get("username") == username), None)
-    disp = _norm(u.get("display_name")) if u else ""
-    return bool(disp and assignee == disp)
+
+    u = next((u for u in users if _norm(u.get("username")) == _norm(username)), None)
+    display_name = _norm(u.get("display_name")) if u else ""
+    return bool(display_name and assignee_display == display_name)
 
 # ─────────────────────────────── JSON wrappers ───────────────────────────────
 def load_tasks():             return load_json(TASKS_FILE, [])
@@ -495,22 +495,31 @@ def add():
         return redirect(url_for("tasks_page" if session.get("role")=="manager" else "index"))
 
     priority = request.form.get("priority","Medium")
-    assigned_username = request.form.get("assigned_to","").strip().lower()
+    assignee_raw = request.form.get("assigned_to","").strip()
+    assignee_key = _norm(assignee_raw)
     due_date = request.form.get("due_date","").strip()
     recurring = "weekly" if request.form.get("recurring")=="weekly" else None
     notes = request.form.get("notes","").strip()
     created_by = session["username"]
 
     users = load_users()
-    assignee_user = next((u for u in users if _norm(u["username"]) == _norm(assigned_username)), None)
-    disp = assignee_user.get("display_name") if assignee_user else assigned_username.title()
+    assignee_user = next((u for u in users if _norm(u["username"]) == assignee_key), None)
+    if assignee_user:
+        assigned_display = assignee_user.get("display_name") or assignee_user["username"].title()
+        assigned_username = _norm(assignee_user["username"])
+    elif assignee_key:
+        assigned_display = assignee_raw or assignee_key.title()
+        assigned_username = assignee_key
+    else:
+        assigned_display = ""
+        assigned_username = None
 
     new = {
         "text": text,
         "done": False,
         "priority": priority,
-        "assigned_to": disp,                 # display label
-        "assigned_username": assigned_username or None,  # canonical login name (may be None if added without assignee)
+        "assigned_to": assigned_display,      # display label
+        "assigned_username": assigned_username,  # canonical login name (may be None if added without assignee)
         "due_date": due_date,
         "recurring": recurring,
         "notes": notes,
@@ -584,15 +593,19 @@ def edit(task_id):
                 t["text"] = request.form.get("task","").strip() or t.get("text","")
                 t["priority"] = request.form.get("priority","Medium")
                 if role=="manager":
-                    new_assigned_username = request.form.get("assigned_to","").strip().lower()
-                    assignee_user = next((u for u in users if _norm(u["username"]) == _norm(new_assigned_username)), None)
+                    assignee_raw = request.form.get("assigned_to","").strip()
+                    assignee_key = _norm(assignee_raw)
+                    assignee_user = next((u for u in users if _norm(u["username"]) == assignee_key), None)
                     if assignee_user:
                         t["assigned_to"] = assignee_user.get("display_name") or assignee_user["username"].title()
-                        t["assigned_username"] = assignee_user["username"]
-                    elif new_assigned_username:
+                        t["assigned_username"] = _norm(assignee_user["username"])
+                    elif assignee_key:
                         # fallback if typed manually
-                        t["assigned_to"] = new_assigned_username.title()
-                        t["assigned_username"] = new_assigned_username
+                        t["assigned_to"] = assignee_raw or assignee_key.title()
+                        t["assigned_username"] = assignee_key
+                    else:
+                        t["assigned_to"] = ""
+                        t["assigned_username"] = None
                 t["due_date"] = request.form.get("due_date","").strip()
                 t["notes"] = request.form.get("notes","").strip()
                 save_tasks(ts)
