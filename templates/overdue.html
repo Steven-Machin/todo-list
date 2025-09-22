@@ -1,69 +1,53 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Overdue Tasks – To Do App</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
-    <a href="{{ url_for('calendar_view') }}">Calendar</a>
-    <a href="{{ url_for('overdue_tasks') }}" class="active">Overdue Tasks</a>
-    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
-    <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}">Logout</a>
-  </div>
+{% extends 'base.html' %}
 
-  <div class="main-content">
-    <div class="container">
-      <h1>Overdue Tasks</h1>
+{% block title %}Overdue Tasks - To Do App{% endblock %}
 
-      {% if overdue %}
-        <ul class="task-list">
-          {% for idx, task in overdue %}
-            <li class="task-item overdue">
-              <div class="task-header">
-                <span class="task-text">{{ loop.index }}. {{ task.text }}</span>
-              </div>
-              <div class="task-meta">
-                <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
-                <span class="assigned">Assigned to: {{ task.assigned_to }}</span>
-                {% if task.due %}
-                  <span class="due">Due: {{ task.due }}</span>
-                {% elif task.due_date %}
-                  <span class="due">Due: {{ task.due_date }}</span>
-                {% endif %}
-                {% if task.created_at %}
-                  <span class="created">Created: {{ task.created_at.split('T')[0] }}</span>
-                {% endif %}
-              </div>
-              {% if task.notes %}
-                <div class="task-notes">
-                  <strong>Notes:</strong> {{ task.notes }}
-                </div>
-              {% endif %}
-              <div class="task-actions">
-                {% if role=='manager' %}
-                  <a href="{{ url_for('edit', task_id=idx) }}">Edit</a>
-                  <a href="{{ url_for('remove', task_id=idx) }}">Remove</a>
-                {% endif %}
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="empty-state">No overdue tasks! 🎉</p>
-      {% endif %}
+{% block content %}
+<div class="container overdue-page">
+  <h1>Overdue Tasks</h1>
 
-      <p style="text-align:right;">
-        <a href="{{ url_for('tasks_page') }}">← Back to Task Manager</a>
-      </p>
-    </div>
-  </div>
-</body>
-</html>
+  {% if overdue %}
+    <ul class="task-list">
+      {% for entry in overdue %}
+        {% set task = entry.task %}
+        <li class="task-item overdue">
+          <div class="task-header">
+            <span class="task-text">{{ task.text or 'Untitled Task' }}</span>
+          </div>
+          <div class="task-meta">
+            <span class="priority {{ (task.priority or 'Medium')|lower }}">Priority: {{ task.priority or 'Medium' }}</span>
+            {% if task.assigned_to %}
+              <span class="assigned">Assigned to: {{ task.assigned_to }}</span>
+            {% endif %}
+            <span class="due">Due: {{ entry.due_display }}</span>
+            {% if task.created_at %}
+              <span class="created">Created: {{ task.created_at.split('T')[0] }}</span>
+            {% endif %}
+          </div>
+          {% if task.notes %}
+            <div class="task-notes">
+              <strong>Notes:</strong> {{ task.notes }}
+            </div>
+          {% endif %}
+          {% if current_role == 'manager' %}
+            <div class="task-actions">
+              <a href="{{ url_for('edit', task_id=entry.idx) }}">Edit</a>
+              <a href="{{ url_for('remove', task_id=entry.idx) }}">Remove</a>
+            </div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">You're all caught up - no overdue tasks right now.</p>
+  {% endif %}
+
+  <p class="return-link" style="text-align:right;">
+    {% if current_role == 'manager' %}
+      <a href="{{ url_for('tasks_page') }}">Back to Task Manager</a>
+    {% else %}
+      <a href="{{ url_for('index') }}">Back to Home</a>
+    {% endif %}
+  </p>
+</div>
+{% endblock %}

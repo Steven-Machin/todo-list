@@ -890,26 +890,38 @@ def settings_update():
 @login_required
 def overdue_tasks():
     username = session["username"]
-    role     = session.get("role", "member")
-    today    = date.today()
+    role = session.get("role", "member")
+    today = date.today()
 
     users = load_users()
-    ts = load_tasks()
+    tasks = load_tasks()
 
-    if role != "manager":
-        ts = [t for t in ts if assigned_to_me(t, username, users)]
+    overdue_entries = []
+    for idx, task in enumerate(tasks):
+        if task.get("done"):
+            continue
 
-    overdue = []
-    for i, t in enumerate(ts):
-        due_raw = t.get("due") or t.get("due_date") or ""
-        d = parse_date(due_raw)
-        if d and not t.get("done") and d < today:
-            overdue.append((i, t))
+        if role != "manager" and not assigned_to_me(task, username, users):
+            continue
 
-    # sort oldest first
-    overdue.sort(key=lambda pair: parse_date_any(pair[1].get("due") or pair[1].get("due_date")))
+        due_raw = task.get("due") or task.get("due_date") or ""
+        due_dt = parse_dt_any(due_raw)
+        if not due_dt:
+            continue
 
-    return render_template("overdue.html", overdue=overdue, role=role)
+        if due_dt.date() >= today:
+            continue
+
+        overdue_entries.append({
+            "idx": idx,
+            "task": task,
+            "due_dt": due_dt,
+            "due_display": due_dt.strftime("%b %d, %Y"),
+        })
+
+    overdue_entries.sort(key=lambda item: item["due_dt"])
+
+    return render_template("overdue.html", overdue=overdue_entries)
 
 # ─────────────────────────────── Group Chats ───────────────────────────────
 @app.route("/groups")
