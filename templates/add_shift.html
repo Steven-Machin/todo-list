@@ -9,7 +9,7 @@
         <div class="top-nav">
             {% if role == 'manager' %}<a href="{{ url_for('view_shifts') }}">Manage Shifts</a>{% endif %}
             <a href="/">Back to Tasks</a>
-            <a href="{{ url_for('logout') }}">Logout</a>
+            <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
         </div>
 
         <h1>Assign New Shift</h1>

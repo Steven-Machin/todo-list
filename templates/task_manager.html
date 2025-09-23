@@ -16,7 +16,7 @@
     <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
     <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
     <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}">Logout</a>
+    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
   </div>
 
   <div class="main-content">

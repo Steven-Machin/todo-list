@@ -7,7 +7,7 @@
     <div class="container">
         <div class="top-nav">
             <a href="/">Back to Tasks</a>
-            <a href="{{ url_for('logout') }}">Logout</a>
+            <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
         </div>
 
         <h1>My Upcoming Shifts</h1>

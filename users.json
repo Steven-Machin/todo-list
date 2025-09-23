@@ -40,5 +40,12 @@
     "password": "scrypt:32768:8:1$I8KXyXlq06J1RVHs$c8a683c425fefcb587478a7ead5741dfd324f4231f7d52c85f17d626ca8b58051b8a1ab956574d98bddb68545e9529152a6747673526a77e8b00554d9c51f4e7",
     "role": "member",
     "titles": []
+  },
+  {
+    "username": "jackson",
+    "display_name": "Jackson",
+    "password": "scrypt:32768:8:1$29cWygKjZlwXebqh$b907d0242e1d1272a71b69c212e188d85915e017d26b5976bd8f7f7a260a5aa1c3d45acc0b19d329624b3eda75baceeff24fb8c04ec2a3231eed1a77a4ea9fed",
+    "role": "member",
+    "titles": []
   }
 ]
