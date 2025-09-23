@@ -755,49 +755,62 @@ def calendar_view():
 @app.route("/api/calendar")
 @login_required
 def calendar_feed():
-    scope = request.args.get("scope","my")  # "my" or "all"
-    user  = session["username"]
-    role  = session.get("role","member")
-    show_all = (scope == "all" and role == "manager")
+    raw_scope = (request.args.get("scope") or "my").lower()
+    if raw_scope not in {"my", "all"}:
+        raw_scope = "my"
+
+    user = session["username"]
+    role = session.get("role", "member")
+    show_all = raw_scope == "all" and role == "manager"
 
     users = load_users()
 
     # tasks
     t_all = load_tasks()
     tasks = t_all if show_all else [
-        t for t in t_all if assigned_to_me(t, user, users) or _norm(t.get("created_by")) == _norm(user)
+        t for t in t_all if assigned_to_me(t, user, users)
     ]
+
+    def normalize_event_start(raw):
+        dt = parse_dt_any(raw)
+        if not dt:
+            return None
+        if dt.time() == datetime.min.time():
+            return dt.date().isoformat()
+        return dt.isoformat()
 
     events = []
     for i, t in enumerate(tasks):
-        start = t.get("due") or t.get("due_date")
+        start = normalize_event_start(t.get("due") or t.get("due_date"))
         if not start:
             continue
         pr = t.get("priority", "Medium")
-        color_map = {"High":"#E6492D", "Medium":"#F3B43E", "Low":"#2FA77A"}
+        color_map = {"High": "#E6492D", "Medium": "#F3B43E", "Low": "#2FA77A"}
         events.append({
             "id": f"task-{i}",
-            "title": f"{t.get('text','Task')} ({pr})",
+            "title": f"{t.get('text', 'Task')} ({pr})",
             "start": start,
             "allDay": True,
             "color": color_map.get(pr, "#2FA77A"),
-            "extendedProps": {"type":"task"}
+            "extendedProps": {"type": "task"}
         })
 
     # shifts
     sh_all = load_shifts()
-    shifts = sh_all if show_all else [s for s in sh_all if _norm(s.get("assigned_to"))==_norm(user)]
+    shifts = sh_all if show_all else [
+        s for s in sh_all if _norm(s.get("assigned_to")) == _norm(user)
+    ]
     for j, s in enumerate(shifts):
-        start = s.get("date")
-        if not start:
+        day = parse_date(s.get("date"))
+        if not day:
             continue
         events.append({
             "id": f"shift-{j}",
-            "title": f"Shift {s.get('start_time','')}–{s.get('end_time','')}",
-            "start": start,
+            "title": f"Shift {s.get('start_time', '')} - {s.get('end_time', '')}",
+            "start": day.isoformat(),
             "allDay": True,
             "color": "#4C6EF5",
-            "extendedProps": {"type":"shift"}
+            "extendedProps": {"type": "shift"}
         })
 
     return jsonify(events)
