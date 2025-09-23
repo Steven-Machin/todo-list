@@ -1,4 +1,4 @@
-# app.py
+﻿# app.py
 from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, jsonify, abort
@@ -51,12 +51,14 @@ NAV_ITEMS = [
     {"label": "My Chats", "endpoint": "chats", "roles": ["member", "manager"], "icon": None},
     {"label": "My Shifts", "endpoint": "my_shifts", "roles": ["member", "manager"], "icon": None},
     {"label": "Settings", "endpoint": "settings", "roles": ["member", "manager"], "icon": None},
+
     {"label": "Task Manager", "endpoint": "tasks_page", "roles": ["manager"], "icon": None},
     {"label": "Team Member Manager", "endpoint": "team_member_manager", "roles": ["manager"], "icon": None},
     {"label": "Group Chat Manager", "endpoint": "group_chat_manager", "roles": ["manager"], "icon": None},
     {"label": "Title Manager", "endpoint": "title_manager", "roles": ["manager"], "icon": None},
     {"label": "Shifts", "endpoint": "view_shifts", "roles": ["manager"], "icon": None},
 ]
+
 
 
 # ─────────────────────────────── Utilities ───────────────────────────────
