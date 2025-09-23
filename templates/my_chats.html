@@ -1,10 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>My Group Chats</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% extends "base.html" %}
+{% block title %}My Group Chats{% endblock %}
+{% block head_extra %}
   <style>
     .section-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
     .group-cards { display:flex; flex-direction:column; gap:10px; }
@@ -16,28 +12,9 @@
     .badge { display:inline-block; min-width:24px; padding:2px 8px; border-radius:999px; background:#007acc; color:#fff; text-align:center; font-weight:600; font-size:.75rem; }
     .muted { opacity:.75; }
   </style>
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('calendar_view') }}">Calendar</a>
-    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-
-    {% if current_role == 'manager' %}
-      <a class="active" href="{{ url_for('chats') }}">Group Chats</a>
-      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
-      <a href="{{ url_for('view_shifts') }}">Shifts</a>
-    {% else %}
-      <a class="active" href="{{ url_for('chats') }}">Group Chats</a>
-    {% endif %}
-
-    <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
-  </div>
-
-  <div class="main-content container">
+{% endblock %}
+{% block content %}
+  <div class="container">
     <div class="section-head">
       <h1 style="margin:0;">My Group Chats</h1>
       <div style="display:flex; gap:8px; align-items:center;">
@@ -54,14 +31,6 @@
       </div>
     </div>
 
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}
-        <div class="flash-area" style="margin-bottom:10px;">
-          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
     {% if cards and cards|length > 0 %}
       <div class="group-cards">
         {% for g in cards %}
@@ -72,7 +41,7 @@
                 <div class="group-last">
                   <span class="last-sender">{{ g.last_sender_display }}</span>:
                   <span class="last-text">{{ g.last.text }}</span>
-                  <span class="last-time">· {{ g.last.timestamp|format_datetime }}</span>
+                  <span class="last-time">{{ g.last.timestamp|format_datetime }}</span>
                 </div>
               {% else %}
                 <div class="group-last muted"><em>No messages yet</em></div>
@@ -85,8 +54,7 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="muted">You’re not in any groups yet, or there are no messages.</p>
+      <p class="muted">You&apos;re not in any groups yet, or there are no messages.</p>
     {% endif %}
   </div>
-</body>
-</html>
+{% endblock %}

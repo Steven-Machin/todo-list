@@ -5,29 +5,25 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}To Do App{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head_extra %}{% endblock %}
 </head>
 <body>
-  <div class="dashboard-grid{% if current_role == 'manager' %} manager{% endif %}">
-    <div class="sidebar">
-      <h2>Menu</h2>
-      <a href="{{ url_for('index') }}">Home</a>
-      {% if current_role == 'manager' %}
-      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
-      <a href="{{ url_for('title_manager') }}">Titles</a>
-      <a href="{{ url_for('view_shifts') }}">Shifts</a>
-      {% endif %}
-      <a href="{{ url_for('calendar_view') }}">Calendar</a>
-      <a href="{{ url_for('overdue_tasks') }}">Overdue</a>
-      {% if current_role == 'manager' %}
-      <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
-      {% else %}
-      <a href="{{ url_for('chats') }}">Group Chats</a>
-      {% endif %}
-      <a href="{{ url_for('settings') }}">Settings</a>
-      <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
-    </div>
+  {% set authed = session.get('username') %}
+  {% set role_for_layout = current_role if authed else 'member' %}
+  <div class="dashboard-grid{% if role_for_layout == 'manager' %} manager{% endif %}">
+    {% if ((show_sidebar is not defined) and authed) or (show_sidebar and authed) %}
+      {% include "_sidebar.html" %}
+    {% endif %}
     <div class="main-content">
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="flash-area">
+            {% for message in messages %}
+              <div class="flash">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
       {% block content %}{% endblock %}
     </div>
   </div>

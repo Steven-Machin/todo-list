@@ -1,40 +1,30 @@
-<!doctype html>
-<html>
-<head>
-    <title>All Shifts</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <div class="container">
-        <h1>All Scheduled Shifts</h1>
+{% extends "base.html" %}
+{% block title %}All Shifts{% endblock %}
+{% block head_extra %}
+  <style>
+    .shift-list { list-style:none; padding:0; margin-top:12px; }
+    .shift-list li { padding:10px 12px; background:#f6f9fc; border-radius:8px; margin-bottom:8px; }
+  </style>
+{% endblock %}
+{% block content %}
+  <div class="container">
+    <h1>All Scheduled Shifts</h1>
 
-        <a href="{{ url_for('add_shift') }}">+ Add New Shift</a> |
-        <a href="/">Back to Tasks</a>
-
-        {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <div class="flash">
-                {% for message in messages %}
-                    <p>{{ message }}</p>
-                {% endfor %}
-            </div>
-        {% endif %}
-        {% endwith %}
-
-        {% if shifts %}
-            <ul class="shift-list">
-                {% for shift in shifts %}
-                    <li>
-                        <strong>{{ shift.date }}</strong> |
-                        {{ shift.start_time }} - {{ shift.end_time }} |
-                        Assigned to: {{ shift.assigned_to.capitalize() }}
-                        {% if shift.notes %} — {{ shift.notes }}{% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>No shifts scheduled yet.</p>
-        {% endif %}
+    <div style="display:flex; gap:12px; margin-bottom:12px;">
+      <a class="button-secondary" href="{{ url_for('add_shift') }}">Add New Shift</a>
+      <a class="button-secondary" href="{{ url_for('index') }}">Back to Dashboard</a>
     </div>
-</body>
-</html>
+
+    {% if shifts %}
+      <ul class="shift-list">
+        {% for shift in shifts %}
+          <li>
+            <strong>{{ shift.date }}</strong> | {{ shift.start_time }} - {{ shift.end_time }} | Assigned to: {{ shift.assigned_to.capitalize() }}{% if shift.notes %} - {{ shift.notes }}{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No shifts scheduled yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}

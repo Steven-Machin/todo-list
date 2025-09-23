@@ -1,15 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Calendar</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-
-  <!-- FullCalendar v6 GLOBAL build (required for window.FullCalendar) -->
+{% extends "base.html" %}
+{% block title %}Calendar{% endblock %}
+{% block head_extra %}
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
-
   <style>
     .calendar-toolbar {
       display: flex; align-items: center; justify-content: space-between;
@@ -23,26 +16,9 @@
     .legend span { display:inline-flex; align-items:center; gap:6px; }
     .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
   </style>
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('index') }}">Home</a>
-    <a class="active" href="{{ url_for('calendar_view') }}">Calendar</a>
-    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-    <a href="{{ url_for('chats') }}">Group Chats</a>
-
-    {% if current_role == 'manager' %}
-      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
-      <a href="{{ url_for('view_shifts') }}">Shifts</a>
-    {% endif %}
-
-    <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
-  </div>
-
-  <div class="main-content container">
+{% endblock %}
+{% block content %}
+  <div class="container">
     <div class="calendar-toolbar">
       <h1 style="margin:0;">Calendar</h1>
 
@@ -61,28 +37,20 @@
       {% endif %}
     </div>
 
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}
-        <div class="flash-area" style="margin-bottom:10px;">
-          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
     <div id="calendar"></div>
   </div>
-
+{% endblock %}
+{% block scripts %}
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const calEl = document.getElementById('calendar');
 
-      // Safety: if FullCalendar failed to load, show a message.
       if (!window.FullCalendar) {
         calEl.innerHTML = "<div style='padding:12px;'>FullCalendar failed to load. Check your network or CDN URL.</div>";
         return;
       }
 
-      let scope = 'my'; // managers can switch to 'all'
+      let scope = 'my';
 
       const calendar = new FullCalendar.Calendar(calEl, {
         initialView: 'dayGridMonth',
@@ -100,7 +68,7 @@
               console.error(err);
               failure(err);
               calEl.insertAdjacentHTML('beforeend',
-                "<div style='padding:10px;color:#b42318;'>Couldn’t load events.</div>");
+                "<div style='padding:10px;color:#b42318;'>Couldn't load events.</div>");
             });
         },
         eventClick: function(info) {
@@ -113,7 +81,6 @@
 
       calendar.render();
 
-      // Manager-only toggle (only if the buttons exist)
       const btnMy  = document.getElementById('btnMy');
       const btnAll = document.getElementById('btnAll');
 
@@ -137,5 +104,4 @@
       }
     });
   </script>
-</body>
-</html>
+{% endblock %}

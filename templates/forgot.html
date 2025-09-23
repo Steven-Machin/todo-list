@@ -1,28 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Forgot Password</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('login') }}">Back to Login</a>
-  </div>
-
-  <div class="main-content container">
+{% extends "base.html" %}
+{% set show_sidebar = False %}
+{% block title %}Forgot Password{% endblock %}
+{% block content %}
+  <div class="container">
     <h1>Forgot your password?</h1>
-    <p>Enter your username and we'll generate a reset link. Because email isn't configured in this demo environment, the next screen will display the link so you can finish resetting your password.</p>
-
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}
-        <div class="flash-area">
-          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+    <p>Enter your username and we&apos;ll generate a reset link. Because email isn&apos;t configured in this demo environment, the next screen will display the link so you can finish resetting your password.</p>
 
     <form class="card" method="post" action="{{ url_for('forgot') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -37,5 +19,4 @@
       </div>
     </form>
   </div>
-</body>
-</html>
+{% endblock %}

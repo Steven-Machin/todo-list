@@ -1,0 +1,13 @@
+<nav class="sidebar">
+  <div class="menu-title">Menu</div>
+  <ul>
+    {% for item in nav_items %}
+      <li class="{{ 'active' if is_active(item.endpoint) else '' }}">
+        <a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
+      </li>
+    {% endfor %}
+    <li class="logout">
+      <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
+    </li>
+  </ul>
+</nav>

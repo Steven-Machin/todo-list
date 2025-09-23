@@ -1,43 +1,38 @@
-<!doctype html>
-<html>
-<head>
-    <title>Add Shift</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <div class="container">
-        <div class="top-nav">
-            {% if role == 'manager' %}<a href="{{ url_for('view_shifts') }}">Manage Shifts</a>{% endif %}
-            <a href="/">Back to Tasks</a>
-            <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
-        </div>
-
-        <h1>Assign New Shift</h1>
-
-        <form action="{{ url_for('add_shift') }}" method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label for="date">Date:</label>
-            <input type="date" name="date" required>
-
-            <label for="start_time">Start Time:</label>
-            <input type="time" name="start_time" required>
-
-            <label for="end_time">End Time:</label>
-            <input type="time" name="end_time" required>
-
-            <label for="assigned_to">Assign To:</label>
-            <select name="assigned_to" required>
-                <option value="">-- Select Employee --</option>
-                {% for user in employees %}
-                    <option value="{{ user }}">{{ user.capitalize() }}</option>
-                {% endfor %}
-            </select>
-
-            <label for="notes">Notes (optional):</label>
-            <textarea name="notes" placeholder="Shift details or special notes..."></textarea>
-
-            <button type="submit">Add Shift</button>
-        </form>
+{% extends "base.html" %}
+{% block title %}Add Shift{% endblock %}
+{% block content %}
+  <div class="container">
+    <div style="display:flex; gap:12px; justify-content:flex-end; margin-bottom:12px;">
+      <a class="button-secondary" href="{{ url_for('index') }}">Back to Dashboard</a>
+      <a class="button-secondary" href="{{ url_for('view_shifts') }}">Manage Shifts</a>
     </div>
-</body>
-</html>
+
+    <h1>Assign New Shift</h1>
+
+    <form action="{{ url_for('add_shift') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="date">Date:</label>
+      <input type="date" name="date" required>
+
+      <label for="start_time">Start Time:</label>
+      <input type="time" name="start_time" required>
+
+      <label for="end_time">End Time:</label>
+      <input type="time" name="end_time" required>
+
+      <label for="assigned_to">Assign To:</label>
+      <select name="assigned_to" required>
+        <option value="">-- Select Employee --</option>
+        {% for user in employees %}
+          <option value="{{ user }}">{{ user.capitalize() }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="notes">Notes (optional):</label>
+      <textarea name="notes" placeholder="Shift details or special notes..."></textarea>
+
+      <button type="submit">Add Shift</button>
+    </form>
+  </div>
+{% endblock %}

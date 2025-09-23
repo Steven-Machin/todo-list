@@ -44,6 +44,21 @@ ALLOWED_EXTS          = {"png","jpg","jpeg","gif"}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+NAV_ITEMS = [
+    {"label": "Home", "endpoint": "index", "roles": ["member", "manager"], "icon": None},
+    {"label": "Calendar", "endpoint": "calendar_view", "roles": ["member", "manager"], "icon": None},
+    {"label": "Overdue", "endpoint": "overdue_tasks", "roles": ["member", "manager"], "icon": None},
+    {"label": "My Chats", "endpoint": "chats", "roles": ["member", "manager"], "icon": None},
+    {"label": "My Shifts", "endpoint": "my_shifts", "roles": ["member", "manager"], "icon": None},
+    {"label": "Settings", "endpoint": "settings", "roles": ["member", "manager"], "icon": None},
+    {"label": "Task Manager", "endpoint": "tasks_page", "roles": ["manager"], "icon": None},
+    {"label": "Team Member Manager", "endpoint": "team_member_manager", "roles": ["manager"], "icon": None},
+    {"label": "Group Chat Manager", "endpoint": "group_chat_manager", "roles": ["manager"], "icon": None},
+    {"label": "Title Manager", "endpoint": "title_manager", "roles": ["manager"], "icon": None},
+    {"label": "Shifts", "endpoint": "view_shifts", "roles": ["manager"], "icon": None},
+]
+
+
 # ─────────────────────────────── Utilities ───────────────────────────────
 @contextlib.contextmanager
 def with_json_lock(path: str):
@@ -119,12 +134,25 @@ def manager_required(f):
         return f(*args, **kwargs)
     return wrapper
 
+def visible_nav(role: str | None):
+    role = (role or "member").lower()
+    return [item for item in NAV_ITEMS if role in item["roles"]]
+
+
+def is_active(endpoint: str):
+    return getattr(request, 'endpoint', None) == endpoint
+
+
 @app.context_processor
 def inject_user_ctx():
+    role = session.get("role", "member")
     return {
         "current_user": session.get("username"),
-        "current_role": session.get("role", "member")
+        "current_role": role,
+        "nav_items": visible_nav(role),
+        "is_active": is_active,
     }
+
 
 def _norm(s):
     return (s or "").strip().lower()

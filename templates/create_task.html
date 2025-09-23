@@ -1,24 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Create New Task – To Do App</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="/">Home</a>
-        <a href="/tasks">Task Manager</a>
-        <a href="/titles">Team Member Manager</a>
-        <a href="/calendar">Calendar</a>
-        <a href="/overdue">Overdue Tasks</a>
-        <a href="/groups">Group Chats</a>
-        <a href="/settings">Settings</a>
-        <a href="/logout" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
-  </div>
-  <div class="main-content">
+{% extends "base.html" %}
+{% block title %}Create New Task{% endblock %}
+{% block content %}
+  <div class="container">
     <h1>Create New Task</h1>
 
     <form class="add-form" action="{{ url_for('add') }}" method="post">
@@ -53,8 +36,7 @@
     </form>
 
     <p style="text-align:center; margin-top:1em;">
-      <a href="{{ url_for('tasks_page') }}">← Back to Task Manager</a>
+      <a href="{{ url_for('tasks_page') }}">&larr; Back to Task Manager</a>
     </p>
   </div>
-</body>
-</html>
+{% endblock %}

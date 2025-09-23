@@ -1,35 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Group Chat Manager</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('calendar_view') }}">Calendar</a>
-    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-    <a class="active" href="{{ url_for('group_chat_manager') }}">Group Chats</a>
-    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-    <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
-    <a href="{{ url_for('view_shifts') }}">Shifts</a>
-    <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
-  </div>
-
-  <div class="main-content container">
+{% extends "base.html" %}
+{% block title %}Group Chat Manager{% endblock %}
+{% block content %}
+  <div class="container">
     <h1>Group Chats</h1>
-
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}
-        <div class="flash-area">
-          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
 
     <div class="grid-2">
       <div class="card">
@@ -41,7 +14,7 @@
                 <div>
                   <div class="title">{{ g.name }}</div>
                   <div class="meta">
-                    Lead: {{ g.supervisor|capitalize }} · Members: {{ g.members|length }}
+                    Lead: {{ g.supervisor|capitalize }} - Members: {{ g.members|length }}
                   </div>
                 </div>
                 <div>
@@ -80,8 +53,7 @@
     </div>
 
     <div class="card subtle">
-      <p>Tip: open a group and use the member tools to add/remove members and pin messages. Only the manager or the group’s supervisor can pin messages.</p>
+      <p>Tip: open a group and use the member tools to add or remove members and pin messages. Only the manager or the group&apos;s supervisor can pin messages.</p>
     </div>
   </div>
-</body>
-</html>
+{% endblock %}

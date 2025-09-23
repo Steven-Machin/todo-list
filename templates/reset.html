@@ -1,28 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Reset Password</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('login') }}">Back to Login</a>
-  </div>
-
-  <div class="main-content container">
+{% extends "base.html" %}
+{% set show_sidebar = False %}
+{% block title %}Reset Password{% endblock %}
+{% block content %}
+  <div class="container">
     <h1>Reset Password</h1>
-    <p>Enter the reset code along with a new password that's at least 6 characters long. In development you'll have copied the reset link from the previous screen.</p>
-
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}
-        <div class="flash-area">
-          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+    <p>Enter the reset code along with a new password that&apos;s at least 6 characters long. In development you&apos;ll have copied the reset link from the previous screen.</p>
 
     <form class="card" method="post" action="{{ url_for('reset_password', token=token) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -47,5 +29,4 @@
       </div>
     </form>
   </div>
-</body>
-</html>
+{% endblock %}

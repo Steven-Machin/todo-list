@@ -1,12 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Home · Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% extends "base.html" %}
+{% block title %}Home - Dashboard{% endblock %}
+{% block head_extra %}
   <style>
-    /* page-specific sugar */
     .kpis { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; margin-bottom:14px; }
     .kpi { background:#fff; border-radius:12px; padding:14px; }
     .kpi .label { font-size:.9rem; opacity:.7; }
@@ -21,13 +16,11 @@
     .muted { opacity:.75; }
     .button-link { background:none; border:none; color:#0d6efd; text-decoration:underline; padding:0; cursor:pointer; }
     .subtle { background:#fafbfd; }
-    /* chips & badges pull from your stylesheet, but safe fallback here */
     .chip { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.75rem; margin-left:6px; line-height:1.6; }
     .chip-prio { background:#eef4ff; color:#2a4b8d; }
     .chip-overdue { background:#ffe3e3; color:#a30000; }
     .chip-today { background:#fff3cd; color:#7a5b00; }
     .badge { display:inline-block; min-width:24px; padding:2px 8px; border-radius:999px; background:#007acc; color:#fff; text-align:center; font-weight:600; font-size:.75rem; }
-    /* group cards (reuse your classes) */
     .group-cards { display:flex; flex-direction:column; gap:10px; }
     .group-card { display:flex; align-items:center; justify-content:space-between; background:#f6f9fc; padding:12px 14px; border-radius:10px; text-decoration:none; }
     .group-card:hover { background:#eef4f9; }
@@ -36,45 +29,17 @@
     .group-last .last-text { opacity:.9; }
     .group-last .last-time { margin-left:6px; opacity:.6; font-size:.85rem; }
   </style>
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a class="active" href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('calendar_view') }}">Calendar</a>
-    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-
-    {% if current_role == 'manager' %}
-      <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
-      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
-      <a href="{{ url_for('view_shifts') }}">Shifts</a>
-    {% else %}
-      <a href="{{ url_for('chats') }}">Group Chats</a>
-    {% endif %}
-
-    <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
-  </div>
-
-  <div class="main-content container">
+{% endblock %}
+{% block content %}
+  <div class="container">
     <div class="section-head" style="margin-bottom:10px;">
       <h1 style="margin:0;">Welcome, {{ (prefs.display_name if prefs and prefs.display_name else current_user|capitalize) }}</h1>
       <form class="searchbar" method="get" action="{{ url_for('search') }}">
-        <input type="search" name="q" placeholder="Search tasks, chats, and people…" required>
+        <input type="search" name="q" placeholder="Search tasks, chats, and people..." required>
         <button type="submit">Search</button>
       </form>
     </div>
 
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}
-        <div class="flash-area" style="margin-bottom:10px;">
-          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-
-    <!-- KPIs -->
     <div class="kpis">
       <div class="kpi">
         <div class="label">Overdue</div>
@@ -91,7 +56,6 @@
     </div>
 
     <div class="grid-2">
-      <!-- Left: Latest Chats -->
       <div class="card">
         <div class="section-head">
           <h2 style="margin:0;">Latest Chats</h2>
@@ -105,42 +69,41 @@
 
         {% if group_cards and group_cards|length > 0 %}
           <div class="group-cards">
-            {% for g in group_cards[:5] %}
-              <a class="group-card" href="{{ url_for('view_group', group_id=g.id) }}">
+            {% for card in group_cards[:5] %}
+              <a class="group-card" href="{{ url_for('view_group', group_id=card.id) }}">
                 <div>
-                  <div class="group-title">{{ g.name }}</div>
-                  {% if g.last %}
+                  <div class="group-title">{{ card.name }}</div>
+                  {% if card.last %}
                     <div class="group-last">
-                      <span class="last-sender">{{ g.last_sender_display }}</span>:
-                      <span class="last-text">{{ g.last.text }}</span>
-                      <span class="last-time">· {{ g.last.timestamp|format_datetime }}</span>
+                      <span class="last-text">{{ card.last.sender|capitalize }}: {{ card.last.text[:40] }}{% if card.last.text|length > 40 %}...{% endif %}</span>
+                      <span class="last-time">{{ card.last.timestamp|format_datetime }}</span>
                     </div>
                   {% else %}
-                    <div class="group-last"><em>No messages yet</em></div>
+                    <div class="group-last muted">No messages yet.</div>
                   {% endif %}
                 </div>
-                {% if g.unread and g.unread > 0 %}
-                  <span class="badge" title="{{ g.unread }} unread">{{ g.unread }}</span>
+                {% if card.unread > 0 %}
+                  <span class="badge">{{ card.unread }}</span>
                 {% endif %}
               </a>
             {% endfor %}
           </div>
-          <div style="margin-top:10px;">
-            {% if current_role == 'manager' %}
-              <a class="button-secondary" href="{{ url_for('group_chat_manager') }}">View All Chats</a>
-            {% else %}
-              <a class="button-secondary" href="{{ url_for('chats') }}">View All Chats</a>
-            {% endif %}
-          </div>
         {% else %}
-          <p class="muted">No groups or messages yet.</p>
+          <p class="muted">No group activity yet.</p>
         {% endif %}
+
+        <div style="margin-top:12px; display:flex; gap:8px;">
+          {% if current_role == 'manager' %}
+            <a class="button-secondary" href="{{ url_for('group_chat_manager') }}">Manage Group Chats</a>
+          {% else %}
+            <a class="button-secondary" href="{{ url_for('chats') }}">View All Chats</a>
+          {% endif %}
+        </div>
       </div>
 
-      <!-- Right: Reminders -->
-      <div class="card">
-        <div class="section-head">
-          <h2 style="margin:0;">Personal Reminders</h2>
+      <div class="card subtle">
+        <div class="section-head" style="margin-bottom:0;">
+          <h2 style="margin:0;">Reminders</h2>
         </div>
 
         <form class="add-form" method="post" action="{{ url_for('add_reminder') }}">
@@ -189,35 +152,30 @@
       </div>
     </div>
 
-    <!-- Tasks snapshot -->
     <div class="card subtle" style="margin-top:16px;">
       <div class="section-head">
         <h2 style="margin:0;">Your Tasks</h2>
-        {% if current_role == 'manager' %}
-          <a class="button-secondary" href="{{ url_for('tasks_page') }}">Open Task Manager</a>
-        {% else %}
-          <a class="button-secondary" href="{{ url_for('tasks_page') }}">View All</a>
-        {% endif %}
+        <a class="button-secondary" href="{{ url_for('tasks_page') }}">Open Task Manager</a>
       </div>
 
-      {% set overdue = tasks|selectattr('overdue')|list %}
-      {% set today   = tasks|selectattr('due_today')|list %}
+      {% set overdue_list = tasks|selectattr('overdue')|list %}
+      {% set today = tasks|selectattr('due_today')|list %}
       {% set upcoming = tasks|rejectattr('overdue')|rejectattr('due_today')|selectattr('done','equalto',False)|list %}
 
       <div class="grid-2" style="grid-template-columns: 1fr 1fr;">
         <div>
           <h3>Overdue</h3>
-          {% if overdue and overdue|length > 0 %}
+          {% if overdue_list and overdue_list|length > 0 %}
             <ul class="list-plain">
-              {% for t in overdue[:5] %}
+              {% for t in overdue_list[:5] %}
                 <li>
                   <div style="font-weight:600;">{{ t.text }} <span class="chip chip-overdue">overdue</span></div>
-                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} · Due {{ (t.due or t.due_date) }}{% endif %}</div>
+                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}</div>
                 </li>
               {% endfor %}
             </ul>
           {% else %}
-            <p class="muted">No overdue tasks. 🎉</p>
+            <p class="muted">No overdue tasks.</p>
           {% endif %}
         </div>
 
@@ -228,7 +186,7 @@
               {% for t in today[:5] %}
                 <li>
                   <div style="font-weight:600;">{{ t.text }} <span class="chip chip-today">today</span></div>
-                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} · Due {{ (t.due or t.due_date) }}{% endif %}</div>
+                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}</div>
                 </li>
               {% endfor %}
             </ul>
@@ -248,7 +206,7 @@
                   {{ t.text }}
                   <span class="chip chip-prio">{{ t.priority }}</span>
                 </div>
-                <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} · Due {{ (t.due or t.due_date) }}{% endif %}</div>
+                <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}</div>
               </li>
             {% endfor %}
           </ul>
@@ -258,5 +216,4 @@
       </div>
     </div>
   </div>
-</body>
-</html>
+{% endblock %}

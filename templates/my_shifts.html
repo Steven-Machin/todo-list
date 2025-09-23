@@ -1,30 +1,29 @@
-<html>
-<head>
-    <title>My Shifts</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <div class="container">
-        <div class="top-nav">
-            <a href="/">Back to Tasks</a>
-            <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
-        </div>
-
-        <h1>My Upcoming Shifts</h1>
-
-        {% if shifts %}
-            <ul class="shift-list">
-                {% for shift in shifts %}
-                    <li>
-                        <strong>{{ shift.date }}</strong> |
-                        {{ shift.start_time }} - {{ shift.end_time }}
-                        {% if shift.notes %} — {{ shift.notes }}{% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>You have no upcoming shifts scheduled.</p>
-        {% endif %}
+{% extends "base.html" %}
+{% block title %}My Shifts{% endblock %}
+{% block head_extra %}
+  <style>
+    .shift-list { list-style:none; padding:0; margin:0; }
+    .shift-list li { padding:10px 12px; background:#f6f9fc; border-radius:8px; margin-bottom:8px; }
+  </style>
+{% endblock %}
+{% block content %}
+  <div class="container">
+    <div style="display:flex; gap:12px; justify-content:flex-end; margin-bottom:12px;">
+      <a class="button-secondary" href="{{ url_for('index') }}">Back to Dashboard</a>
     </div>
-</body>
-</html>
+
+    <h1>My Upcoming Shifts</h1>
+
+    {% if shifts %}
+      <ul class="shift-list">
+        {% for shift in shifts %}
+          <li>
+            <strong>{{ shift.date }}</strong> | {{ shift.start_time }} - {{ shift.end_time }}{% if shift.notes %} - {{ shift.notes }}{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>You have no upcoming shifts scheduled.</p>
+    {% endif %}
+  </div>
+{% endblock %}

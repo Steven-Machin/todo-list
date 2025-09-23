@@ -1,99 +1,62 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Task Manager</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-    <a href="{{ url_for('title_manager') }}">Team Member Manager</a>
-    <a href="{{ url_for('calendar_view') }}">Calendar</a>
-    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-    <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
-    <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
-  </div>
+{% extends "base.html" %}
+{% block title %}Task Manager{% endblock %}
+{% block content %}
+  <div class="container">
+    <h1>Task Manager</h1>
 
-  <div class="main-content">
-    <div class="container">
-      <h1>Task Manager</h1>
+    {% if role == 'manager' %}
+      <div style="margin-bottom: 16px;">
+        <a href="{{ url_for('create_task_page') }}" style="font-weight:500; color:#007acc; text-decoration:none;">+ Create New Task</a>
+      </div>
 
-      {% if role == 'manager' %}
-        <!-- 1) Create New Task up here -->
-        <div style="margin-bottom: 16px;">
-          <a href="{{ url_for('create_task_page') }}"
-             style="font-weight:500; color:#007acc; text-decoration:none;">
-            + Create New Task
-          </a>
-        </div>
+      <form class="filter-form" method="get" action="{{ url_for('tasks_page') }}">
+        <label for="sort" style="margin-right:8px;">Sort:</label>
+        <select name="sort" id="sort">
+          <option value="due"           {% if sort_by=='due'           %}selected{% endif %}>Due Date (Soon -> Far)</option>
+          <option value="due_rev"       {% if sort_by=='due_rev'       %}selected{% endif %}>Due Date (Far -> Soon)</option>
+          <option value="priority"      {% if sort_by=='priority'      %}selected{% endif %}>Priority (High -> Low)</option>
+          <option value="priority_rev"  {% if sort_by=='priority_rev'  %}selected{% endif %}>Priority (Low -> High)</option>
+          <option value="status"        {% if sort_by=='status'        %}selected{% endif %}>Completed Only</option>
+        </select>
+        <button type="submit">Apply</button>
+      </form>
 
-        <!-- 2) Sort/Filter dropdown in its own row -->
-        <form class="filter-form" method="get" action="{{ url_for('tasks_page') }}">
-          <label for="sort" style="margin-right:8px;">Sort:</label>
-          <select name="sort">
-            <option value="due"           {% if sort_by=='due'           %}selected{% endif %}>Due Date (Soon → Far)</option>
-            <option value="due_rev"       {% if sort_by=='due_rev'       %}selected{% endif %}>Due Date (Far → Soon)</option>
-            <option value="priority"      {% if sort_by=='priority'      %}selected{% endif %}>Priority (High → Low)</option>
-            <option value="priority_rev"  {% if sort_by=='priority_rev'  %}selected{% endif %}>Priority (Low → High)</option>
-            <option value="status"        {% if sort_by=='status'        %}selected{% endif %}>Completed Only</option>
-          </select>
-          <button type="submit">Apply</button>
-        </form>
-
-        <ul class="task-list">
-          {% for task in tasks %}
-            <li class="task-item {% if task.overdue %}overdue{% endif %}">
-              <div class="task-header">
-                <form method="post" action="{{ url_for('toggle', task_id=loop.index0) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="checkbox" onchange="this.form.submit()"
-                         {% if task.done %}checked{% endif %}>
-                </form>
-                <span class="task-text {% if task.done %}done{% endif %}">
-                  {{ loop.index }}. {{ task.text }}
-                </span>
-              </div>
-              <div class="task-meta">
-                <span class="priority {{ task.priority|lower }}">
-                  Priority: {{ task.priority }}
-                </span>
-                <span class="assigned">
-                  Assigned to: {{ task.assigned_to }}
-                </span>
-                {% if task.due %}
-                  <span class="due">Due: {{ task.due }}</span>
-                {% endif %}
-
-                {# Show both date & time of completion in 12-hr format #}
-                {% if task.completed_at %}
-                  <span class="completed">
-                    Completed at: {{ task.completed_at|format_datetime }}
-                  </span>
-                {% endif %}
-              </div>
-
-              {% if task.notes %}
-                <div class="task-notes">
-                  <strong>Notes:</strong> {{ task.notes }}
-                </div>
+      <ul class="task-list">
+        {% for task in tasks %}
+          <li class="task-item {% if task.overdue %}overdue{% endif %}">
+            <div class="task-header">
+              <form method="post" action="{{ url_for('toggle', task_id=loop.index0) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="checkbox" onchange="this.form.submit()" {% if task.done %}checked{% endif %}>
+              </form>
+              <span class="task-text {% if task.done %}done{% endif %}">{{ loop.index }}. {{ task.text }}</span>
+            </div>
+            <div class="task-meta">
+              <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
+              <span class="assigned">Assigned to: {{ task.assigned_to }}</span>
+              {% if task.due %}
+                <span class="due">Due: {{ task.due }}</span>
               {% endif %}
+              {% if task.completed_at %}
+                <span class="completed">Completed at: {{ task.completed_at|format_datetime }}</span>
+              {% endif %}
+            </div>
 
-              <div class="task-actions">
-                <a href="{{ url_for('edit',   task_id=loop.index0) }}">Edit</a>
-                <a href="{{ url_for('remove', task_id=loop.index0) }}">Remove</a>
+            {% if task.notes %}
+              <div class="task-notes">
+                <strong>Notes:</strong> {{ task.notes }}
               </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p>You do not have access to this page.</p>
-      {% endif %}
-    </div><!-- /.container -->
-  </div><!-- /.main-content -->
-</body>
-</html>
+            {% endif %}
+
+            <div class="task-actions">
+              <a href="{{ url_for('edit', task_id=loop.index0) }}">Edit</a>
+              <a href="{{ url_for('remove', task_id=loop.index0) }}">Remove</a>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>You do not have access to this page.</p>
+    {% endif %}
+  </div>
+{% endblock %}

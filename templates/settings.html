@@ -1,46 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Settings</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body class="theme-{{ my_prefs.theme|default('light') }}">
-  <!-- Sidebar -->
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('calendar_view') }}">Calendar</a>
-    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-
-    {# Chats link: managers -> group manager; members -> chats hub #}
-    {% if current_role == 'manager' %}
-      <a href="{{ url_for('group_chat_manager') }}">Group Chats</a>
-      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
-      <a href="{{ url_for('view_shifts') }}">Shifts</a>
-    {% else %}
-      <a href="{{ url_for('chats') }}">Group Chats</a>
-    {% endif %}
-
-    <a class="active" href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
-  </div>
-
-  <!-- Main -->
-  <div class="main-content container">
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block head_extra %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.classList.add('theme-{{ my_prefs.theme|default("light") }}');
+    });
+  </script>
+{% endblock %}
+{% block content %}
+  <div class="container">
     <h1>Settings</h1>
-
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}
-        <div class="flash-area">
-          {% for m in msgs %}
-            <div class="flash">{{ m }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
 
     <form class="card" method="post" action="{{ url_for('settings_update') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -107,5 +76,13 @@
       <p>Forgot your password? <a href="{{ url_for('forgot') }}">Reset it here</a>.</p>
     </div>
   </div>
-</body>
-</html>
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script>
+    document.getElementById('theme').addEventListener('change', function (ev) {
+      document.body.classList.remove('theme-light', 'theme-dark');
+      document.body.classList.add('theme-' + ev.target.value);
+    });
+  </script>
+{% endblock %}

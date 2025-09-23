@@ -1,36 +1,30 @@
-<!doctype html>
-<html>
-<head>
-    <title>Edit Task</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <div class="container">
-        <h1>Edit Task</h1>
+{% extends "base.html" %}
+{% block title %}Edit Task{% endblock %}
+{% block content %}
+  <div class="container">
+    <h1>Edit Task</h1>
 
-        <form class="add-form" action="{{ url_for('edit', task_id=task_id) }}" method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="text" name="task" value="{{ task.text }}" required>
+    <form class="add-form" action="{{ url_for('edit', task_id=task_id) }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="text" name="task" value="{{ task.text }}" required>
 
-            <select name="priority">
-                <option value="Low" {% if task.priority == 'Low' %}selected{% endif %}>Low</option>
-                <option value="Medium" {% if task.priority == 'Medium' %}selected{% endif %}>Medium</option>
-                <option value="High" {% if task.priority == 'High' %}selected{% endif %}>High</option>
-            </select>
+      <select name="priority">
+        <option value="Low" {% if task.priority == 'Low' %}selected{% endif %}>Low</option>
+        <option value="Medium" {% if task.priority == 'Medium' %}selected{% endif %}>Medium</option>
+        <option value="High" {% if task.priority == 'High' %}selected{% endif %}>High</option>
+      </select>
 
-            {% if role == 'manager' %}
-                <input type="text" name="assigned_to" value="{{ task.assigned_to.capitalize() }}" placeholder="Assign to">
-            {% else %}
-                <input type="hidden" name="assigned_to" value="{{ task.assigned_to }}">
-            {% endif %}
+      {% if role == 'manager' %}
+        <input type="text" name="assigned_to" value="{{ task.assigned_to.capitalize() }}" placeholder="Assign to">
+      {% else %}
+        <input type="hidden" name="assigned_to" value="{{ task.assigned_to }}">
+      {% endif %}
 
-            <input type="date" name="due" value="{{ task.due }}">
-            <textarea name="notes" placeholder="Optional notes">{{ task.notes }}</textarea>
+      <input type="date" name="due" value="{{ task.due }}">
+      <textarea name="notes" placeholder="Optional notes">{{ task.notes }}</textarea>
 
-            <button type="submit">Save Changes</button>
-            <a href="/" style="align-self: center; margin-left: 10px;">Cancel</a>
-        </form>
-    </div>
-</body>
-</html>
-
+      <button type="submit">Save Changes</button>
+      <a class="button-secondary" href="{{ url_for('index') }}" style="align-self:center; margin-left:10px;">Cancel</a>
+    </form>
+  </div>
+{% endblock %}

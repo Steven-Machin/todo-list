@@ -1,10 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>{{ group.name }} · Group Chat</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% extends "base.html" %}
+{% block title %}{{ group.name }} - Group Chat{% endblock %}
+{% block head_extra %}
   <style>
     .chat-wrap { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
     .messages { background: #fff; border-radius: 10px; padding: 12px; }
@@ -24,46 +20,18 @@
     .compose { background:#fff; border-radius:10px; padding:12px; margin-top:10px; }
     .pill { display:inline-block; border-radius:999px; padding:2px 8px; font-size:.75rem; background:#eef4ff; color:#2a4b8d; }
   </style>
-</head>
-<body>
-  <div class="sidebar">
-    <h2>Menu</h2>
-    <a href="{{ url_for('index') }}">Home</a>
-    <a href="{{ url_for('calendar_view') }}">Calendar</a>
-    <a href="{{ url_for('overdue_tasks') }}">Overdue Tasks</a>
-
-    {% if current_role == 'manager' %}
-      <a class="active" href="{{ url_for('group_chat_manager') }}">Group Chats</a>
-      <a href="{{ url_for('tasks_page') }}">Task Manager</a>
-      <a href="{{ url_for('team_member_manager') }}">Team Member Manager</a>
-      <a href="{{ url_for('view_shifts') }}">Shifts</a>
-    {% else %}
-      <a class="active" href="{{ url_for('chats') }}">Group Chats</a>
-    {% endif %}
-
-    <a href="{{ url_for('settings') }}">Settings</a>
-    <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?');">Logout</a>
-  </div>
-
-  <div class="main-content container">
+{% endblock %}
+{% block content %}
+  <div class="container">
     <h1>{{ group.name }}</h1>
-    <p class="muted">Lead: <span class="pill">{{ group.supervisor|capitalize }}</span> · Members: {{ group.members|length }}</p>
-
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}
-        <div class="flash-area">
-          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+    <p class="muted">Lead: <span class="pill">{{ group.supervisor|capitalize }}</span> - Members: {{ group.members|length }}</p>
 
     <div class="chat-wrap">
-      <!-- Messages -->
       <div>
         <div class="messages">
           {% if messages and messages|length > 0 %}
             {% for m in messages %}
-              {% set results = users|selectattr("username","equalto", m.sender)|list %}
+              {% set results = users|selectattr('username','equalto', m.sender)|list %}
               {% set u = results[0] if results and results|length > 0 else None %}
               {% set display = (u.display_name if u and u.display_name else m.sender|capitalize) %}
 
@@ -119,7 +87,6 @@
         </form>
       </div>
 
-      <!-- Sidebar: members & tasks -->
       <div>
         {% if current_role == 'manager' %}
           <div class="member-tools">
@@ -161,7 +128,7 @@
                   <div>
                     <div class="title">{% if t.done %}<s>{{ t.text }}</s>{% else %}{{ t.text }}{% endif %}</div>
                     <div class="meta">
-                      Priority: {{ t.priority }}{% if t.completed_by %} · Completed by {{ t.completed_by|capitalize }}{% endif %}
+                      Priority: {{ t.priority }}{% if t.completed_by %} - Completed by {{ t.completed_by|capitalize }}{% endif %}
                     </div>
                   </div>
                   <div>
@@ -211,5 +178,4 @@
       {% endif %}
     </div>
   </div>
-</body>
-</html>
+{% endblock %}
