@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Reset Link Sent</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>Menu</h2>
+    <a href="{{ url_for('login') }}">Back to Login</a>
+  </div>
+
+  <div class="main-content container">
+    <h1>Check your email</h1>
+    <p>If the username you entered is in our system, a reset link has been created. Email delivery isn't configured here, so use the link below to continue.</p>
+
+    {% with msgs = get_flashed_messages() %}
+      {% if msgs %}
+        <div class="flash-area">
+          {% for m in msgs %}<div class="flash">{{ m }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% if reset_url %}
+      <div class="card">
+        <p><strong>Temporary reset link:</strong></p>
+        <p><a href="{{ reset_url }}">{{ reset_url }}</a></p>
+        <p class="hint">Copy this URL into your browser if it doesn't open automatically.</p>
+      </div>
+    {% else %}
+      <div class="card">
+        <p>If an account exists for that username, you'll receive a reset link via email.</p>
+      </div>
+    {% endif %}
+
+    <div class="actions">
+      {% if reset_url %}<a class="button-secondary" href="{{ reset_url }}">Open reset form</a>{% endif %}
+      <a class="button-secondary" href="{{ url_for('login') }}">Back to Login</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -3,7 +3,7 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, jsonify, abort
 )
-import json, os, uuid
+import json, os, uuid, secrets
 from datetime import datetime, timedelta, date
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -79,6 +79,33 @@ def inject_user_ctx():
 def _norm(s):
     return (s or "").strip().lower()
 
+
+def generate_csrf_token():
+    token = session.get("_csrf_token")
+    if not token:
+        token = secrets.token_hex(16)
+        session["_csrf_token"] = token
+    return token
+
+
+def validate_csrf_token():
+    expected = session.get("_csrf_token")
+    submitted = request.form.get("csrf_token")
+    if not expected or not submitted:
+        session.pop("_csrf_token", None)
+        return False
+    try:
+        match = secrets.compare_digest(str(expected), str(submitted))
+    except Exception:
+        match = False
+    if not match:
+        session.pop("_csrf_token", None)
+        return False
+    session["_csrf_token"] = secrets.token_hex(16)
+    return True
+
+
+app.jinja_env.globals["csrf_token"] = generate_csrf_token
 
 def parse_dt_any(s: str) -> datetime | None:
     """Return a naive datetime for common ISO-like strings or None."""
@@ -250,6 +277,10 @@ def logout():
 @app.route("/forgot", methods=["GET", "POST"])
 def forgot():
     if request.method == "POST":
+        if not validate_csrf_token():
+            flash("The reset request form expired. Please try again.")
+            return render_template("forgot.html"), 400
+
         uname = request.form.get("username", "").strip().lower()
         users = load_users()
         user = next((u for u in users if u["username"] == uname), None)
@@ -290,6 +321,10 @@ def reset_password(token):
         pass
 
     if request.method == "POST":
+        if not validate_csrf_token():
+            flash("The reset form expired. Please try again.")
+            return render_template("reset.html", token=token), 400
+
         pw1 = request.form.get("password", "")
         pw2 = request.form.get("password2", "")
         if not pw1 or pw1 != pw2:
