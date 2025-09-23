@@ -9,6 +9,7 @@
         <h1>Edit Task</h1>
 
         <form class="add-form" action="{{ url_for('edit', task_id=task_id) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="text" name="task" value="{{ task.text }}" required>
 
             <select name="priority">

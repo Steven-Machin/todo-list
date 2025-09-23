@@ -44,6 +44,7 @@
         {% set total_unread = cards|sum(attribute='unread') if cards else 0 %}
         {% if total_unread > 0 %}
           <form method="post" action="{{ url_for('groups_mark_all_read') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="button-secondary" type="submit">Mark All Read ({{ total_unread }})</button>
           </form>
         {% endif %}

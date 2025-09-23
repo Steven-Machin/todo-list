@@ -83,12 +83,14 @@
                 <div class="msg-actions">
                   {% if current_role == 'manager' or current_user == group.supervisor %}
                     <form style="display:inline" method="post" action="{{ url_for('pin_message', group_id=group.id, idx=loop.index0) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       <button class="pin-btn" type="submit">{% if m.pinned %}Unpin{% else %}Pin{% endif %}</button>
                     </form>
                   {% endif %}
 
                   {% if current_role == 'manager' or current_user == m.sender %}
                     <form style="display:inline" method="post" action="{{ url_for('delete_message', group_id=group.id, idx=loop.index0) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       <button class="del-btn" type="submit">Delete</button>
                     </form>
                   {% endif %}
@@ -101,6 +103,7 @@
         </div>
 
         <form class="compose" method="post" action="{{ url_for('post_group_message', group_id=group.id) }}" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <h3>New Message</h3>
           <div class="form-row">
             <label for="message">Message</label>
@@ -128,6 +131,7 @@
                     <div class="title">{{ m|capitalize }}</div>
                     {% if m != group.supervisor %}
                       <form method="post" action="{{ url_for('remove_group_member', group_id=group.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="member" value="{{ m }}">
                         <button class="button-small danger" type="submit">Remove</button>
                       </form>
@@ -140,6 +144,7 @@
             {% endif %}
 
             <form class="add-form" method="post" action="{{ url_for('add_group_member', group_id=group.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <label for="member">Add member (username)</label>
               <input type="text" id="member" name="member" placeholder="username" required>
               <button type="submit">Add</button>
@@ -161,6 +166,7 @@
                   </div>
                   <div>
                     <form method="post" action="{{ url_for('toggle_group_task', group_id=group.id, idx=loop.index0) }}" enctype="multipart/form-data">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       {% if not t.done %}
                         <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif">
                       {% endif %}
@@ -177,6 +183,7 @@
           {% endif %}
 
           <form class="add-form" method="post" action="{{ url_for('add_group_task', group_id=group.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label for="t_text">New Task</label>
             <input type="text" id="t_text" name="text" placeholder="Task description" required>
 

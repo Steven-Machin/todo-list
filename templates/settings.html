@@ -43,6 +43,7 @@
     {% endwith %}
 
     <form class="card" method="post" action="{{ url_for('settings_update') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <h2>Profile</h2>
       <div class="form-row">
         <label for="display_name">Display Name</label>

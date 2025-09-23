@@ -50,6 +50,7 @@
             <li class="task-item {% if task.overdue %}overdue{% endif %}">
               <div class="task-header">
                 <form method="post" action="{{ url_for('toggle', task_id=loop.index0) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="checkbox" onchange="this.form.submit()"
                          {% if task.done %}checked{% endif %}>
                 </form>

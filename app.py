@@ -3,14 +3,25 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, jsonify, abort
 )
-import json, os, uuid, secrets
+import json, os, uuid, secrets, contextlib
 from datetime import datetime, timedelta, date
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
+
+try:
+    import fcntl  # type: ignore[import]
+except ImportError:
+    fcntl = None
+
+try:
+    import portalocker  # type: ignore[import]
+except ImportError:
+    portalocker = None
+
 app = Flask(__name__)
-app.secret_key = "manager-task-secret"
+app.secret_key = os.environ.get("SECRET_KEY", "manager-task-secret")
 
 # ─────────────────────────────── Paths / Config ───────────────────────────────
 TASKS_FILE            = "tasks.json"
@@ -34,19 +45,58 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # ─────────────────────────────── Utilities ───────────────────────────────
+@contextlib.contextmanager
+def with_json_lock(path: str):
+    lock_path = f"{path}.lock"
+    os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
+    lock_file = open(lock_path, "a+")
+    locked_via = None
+    try:
+        if "portalocker" in globals() and portalocker is not None:
+            portalocker.lock(lock_file, portalocker.LOCK_EX)
+            locked_via = "portalocker"
+        elif "fcntl" in globals() and fcntl is not None:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            locked_via = "fcntl"
+        yield
+    finally:
+        try:
+            if locked_via == "portalocker" and portalocker is not None:
+                portalocker.unlock(lock_file)
+            elif locked_via == "fcntl" and fcntl is not None:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+        finally:
+            lock_file.close()
+
+
+def save_json_atomic(path, data):
+    tmp_path = f"{path}.tmp"
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    with with_json_lock(path):
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+
 def load_json(path, default):
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except Exception:
-                # corrupted file fallback
-                return default
+    with with_json_lock(path):
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                try:
+                    return json.load(f)
+                except Exception:
+                    return default
     return default
 
+
 def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    save_json_atomic(path, data)
+
 
 def allowed_file(fn):
     return "." in fn and fn.rsplit(".",1)[1].lower() in ALLOWED_EXTS
@@ -80,32 +130,21 @@ def _norm(s):
     return (s or "").strip().lower()
 
 
-def generate_csrf_token():
-    token = session.get("_csrf_token")
-    if not token:
-        token = secrets.token_hex(16)
-        session["_csrf_token"] = token
-    return token
+def csrf_token():
+    return session.get("_csrf", "")
 
 
-def validate_csrf_token():
-    expected = session.get("_csrf_token")
-    submitted = request.form.get("csrf_token")
-    if not expected or not submitted:
-        session.pop("_csrf_token", None)
-        return False
-    try:
-        match = secrets.compare_digest(str(expected), str(submitted))
-    except Exception:
-        match = False
-    if not match:
-        session.pop("_csrf_token", None)
-        return False
-    session["_csrf_token"] = secrets.token_hex(16)
-    return True
+app.jinja_env.globals["csrf_token"] = csrf_token
 
 
-app.jinja_env.globals["csrf_token"] = generate_csrf_token
+@app.before_request
+def ensure_csrf_token():
+    session["_csrf"] = session.get("_csrf") or secrets.token_urlsafe(32)
+    if request.method == "POST":
+        token = session.get("_csrf")
+        submitted = request.form.get("csrf_token")
+        if not token or not submitted or not secrets.compare_digest(submitted, token):
+            abort(400)
 
 def parse_dt_any(s: str) -> datetime | None:
     """Return a naive datetime for common ISO-like strings or None."""
@@ -277,10 +316,6 @@ def logout():
 @app.route("/forgot", methods=["GET", "POST"])
 def forgot():
     if request.method == "POST":
-        if not validate_csrf_token():
-            flash("The reset request form expired. Please try again.")
-            return render_template("forgot.html"), 400
-
         uname = request.form.get("username", "").strip().lower()
         users = load_users()
         user = next((u for u in users if u["username"] == uname), None)
@@ -321,10 +356,6 @@ def reset_password(token):
         pass
 
     if request.method == "POST":
-        if not validate_csrf_token():
-            flash("The reset form expired. Please try again.")
-            return render_template("reset.html", token=token), 400
-
         pw1 = request.form.get("password", "")
         pw2 = request.form.get("password2", "")
         if not pw1 or pw1 != pw2:
@@ -1255,4 +1286,10 @@ def toggle_group_task(group_id, idx):
 
 # ─────────────────────────────── Run ───────────────────────────────
 if __name__ == "__main__":
-    app.run(debug=True)
+    env = os.environ.get("FLASK_ENV", "production").lower()
+    debug_env = os.environ.get("DEBUG")
+    if debug_env is not None:
+        debug = debug_env.lower() in ("1", "true", "yes", "on")
+    else:
+        debug = env in ("development", "debug")
+    app.run(debug=debug)

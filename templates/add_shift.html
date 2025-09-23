@@ -15,6 +15,7 @@
         <h1>Assign New Shift</h1>
 
         <form action="{{ url_for('add_shift') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label for="date">Date:</label>
             <input type="date" name="date" required>
 

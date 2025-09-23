@@ -97,6 +97,7 @@
           <h2 style="margin:0;">Latest Chats</h2>
           {% if group_cards and (group_cards|sum(attribute='unread')) > 0 %}
             <form method="post" action="{{ url_for('groups_mark_all_read') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="button-secondary" type="submit">Mark All Read</button>
             </form>
           {% endif %}
@@ -143,6 +144,7 @@
         </div>
 
         <form class="add-form" method="post" action="{{ url_for('add_reminder') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label for="r_text">Reminder</label>
           <input type="text" id="r_text" name="text" placeholder="What do you want to remember?" required>
 
@@ -169,9 +171,11 @@
                   </div>
                   <div style="display:flex; gap:8px;">
                     <form method="post" action="{{ url_for('reminders_toggle', rid=r.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       <button class="button-secondary" type="submit">{{ 'Undo' if r.done else 'Done' }}</button>
                     </form>
                     <form method="post" action="{{ url_for('reminders_delete', rid=r.id) }}" onsubmit="return confirm('Delete this reminder?');">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       <button class="button-secondary danger" type="submit">Delete</button>
                     </form>
                   </div>

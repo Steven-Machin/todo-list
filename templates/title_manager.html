@@ -32,6 +32,7 @@
               <strong>{{ user.display_name }}</strong><br/>
               <!-- ADD form -->
               <form method="post" action="{{ url_for('update_titles') }}" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label>Add title:</label>
                 <select name="add_title_{{ user.username }}">
                   <option value="">-- Select --</option>
@@ -71,6 +72,7 @@
 
               <!-- ADD form -->
               <form method="post" action="{{ url_for('update_titles') }}" class="inline-form" style="margin-top:4px">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <label>Add title:</label>
                 <select name="add_title_{{ user.username }}">
                   <option value="">-- Select --</option>
@@ -88,6 +90,7 @@
       <!-- Create New Title moved here -->
       <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
         <form method="post" action="{{ url_for('title_manager') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label for="new_title">Create New Title:</label>
           <input type="text" name="new_title" id="new_title" required placeholder="e.g., Lead Teacher"/>
           <button type="submit">Add Title</button>

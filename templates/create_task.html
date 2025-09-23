@@ -22,6 +22,7 @@
     <h1>Create New Task</h1>
 
     <form class="add-form" action="{{ url_for('add') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="text" name="task" placeholder="Task description" required>
 
       <select name="priority">
