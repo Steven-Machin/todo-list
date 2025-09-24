@@ -21,7 +21,14 @@ except ImportError:
     portalocker = None
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "manager-task-secret")
+app.secret_key = os.getenv("SECRET_KEY", "dev-only-key")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.getenv("FLASK_ENV") == "production",
+)
+
+DEBUG = os.getenv("FLASK_ENV") != "production"
 
 APP_MODE = os.environ.get("APP_MODE", "prod").lower()
 DEMO = APP_MODE == "demo"
@@ -317,8 +324,11 @@ def seed_demo_data():
     if users or tasks or groups:
         return
 
-    admin_pw = generate_password_hash(os.environ.get("DEMO_ADMIN_PASSWORD", "demo123"))
-    member_pw = generate_password_hash(os.environ.get("DEMO_MEMBER_PASSWORD", "demo123"))
+    admin_pw_source = os.getenv("DEMO_ADMIN_PASSWORD") or secrets.token_urlsafe(24)
+    member_pw_source = os.getenv("DEMO_MEMBER_PASSWORD") or secrets.token_urlsafe(24)
+
+    admin_pw = generate_password_hash(admin_pw_source)
+    member_pw = generate_password_hash(member_pw_source)
 
     demo_users = [
         {
@@ -420,6 +430,15 @@ def seed_demo_data():
     save_group_seen(demo_group_seen)
 
 seed_demo_data()
+
+
+@app.get("/robots.txt")
+def robots():
+    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain"}
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True, "mode": APP_MODE}, 200
 
 # ─────────────────────────────── Jinja filters ───────────────────────────────
 @app.template_filter('format_datetime')
@@ -1518,10 +1537,4 @@ for rule, canonical, legacy in LEGACY_ENDPOINT_ALIASES:
 
 # ------------- Run -------------
 if __name__ == "__main__":
-    env = os.environ.get("FLASK_ENV", "production").lower()
-    debug_env = os.environ.get("DEBUG")
-    if debug_env is not None:
-        debug = debug_env.lower() in ("1", "true", "yes", "on")
-    else:
-        debug = env in ("development", "debug")
-    app.run(debug=debug)
+    app.run(debug=DEBUG)

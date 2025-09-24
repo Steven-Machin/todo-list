@@ -1,0 +1,8 @@
+Flask==3.0.3
+gunicorn==21.2.0
+itsdangerous>=2.1.2
+Jinja2>=3.1.3
+Werkzeug>=3.0.2
+# enable if we added CSRF via Flask-WTF; otherwise omit:
+# Flask-WTF>=1.2.1
+
