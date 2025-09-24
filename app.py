@@ -3,7 +3,7 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, jsonify, abort
 )
-import json, os, uuid, secrets, contextlib
+import json, os, uuid, secrets, contextlib, tempfile
 from datetime import datetime, timedelta, date
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -106,28 +106,35 @@ def with_json_lock(path: str):
 
 
 def save_json_atomic(path, data):
-    tmp_path = f"{path}.tmp"
     directory = os.path.dirname(path) or "."
     os.makedirs(directory, exist_ok=True)
     with with_json_lock(path):
+        fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=directory)
         try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            os.replace(tmp_path, path)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
         finally:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 def load_json(path, default):
-    with with_json_lock(path):
-        if os.path.exists(path):
+    try:
+        with with_json_lock(path):
             with open(path, "r", encoding="utf-8") as f:
-                try:
-                    return json.load(f)
-                except Exception:
-                    return default
-    return default
+                return json.load(f)
+    except FileNotFoundError:
+        save_json_atomic(path, default)
+        return default
+    except json.JSONDecodeError:
+        return default
+    except OSError:
+        return default
 
 
 def save_json(path, data):
