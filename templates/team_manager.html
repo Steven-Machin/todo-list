@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Team Member Manager{% endblock %}
+{% block content %}
+  <div class="container">
+    <h1>Team Member Manager</h1>
+
+    {% if users %}
+      <table class="table" style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Username</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Display Name</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Role</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Titles</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+            <tr>
+              <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ user.username }}</td>
+              <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ user.display_name or user.username|capitalize }}</td>
+              <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ user.role|capitalize }}</td>
+              <td style="padding:8px; border-bottom:1px solid #f0f0f0;">
+                {% if user.titles %}
+                  {{ user.titles|join(', ') }}
+                {% else %}
+                  <span class="muted">No titles assigned</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No team members found.</p>
+    {% endif %}
+
+    <p style="margin-top:20px;">
+      <a class="button-secondary" href="{{ url_for('dashboard') }}">Back to Home</a>
+    </p>
+  </div>
+{% endblock %}

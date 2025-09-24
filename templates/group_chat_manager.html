@@ -30,7 +30,7 @@
 
       <div class="card">
         <h2>Create New Group</h2>
-        <form method="post" action="{{ url_for('add_group') }}">
+        <form method="post" action="{{ url_for('group_chat_manager') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="form-row">
             <label for="group_name">Group Name</label>

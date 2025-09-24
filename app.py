@@ -45,19 +45,20 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 NAV_ITEMS = [
-    {"label": "Home", "endpoint": "index", "roles": ["member", "manager"], "icon": None},
-    {"label": "Calendar", "endpoint": "calendar_view", "roles": ["member", "manager"], "icon": None},
-    {"label": "Overdue", "endpoint": "overdue_tasks", "roles": ["member", "manager"], "icon": None},
-    {"label": "My Chats", "endpoint": "chats", "roles": ["member", "manager"], "icon": None},
+    {"label": "Home", "endpoint": "dashboard", "roles": ["member", "manager"], "icon": None},
+    {"label": "Calendar", "endpoint": "calendar", "roles": ["member", "manager"], "icon": None},
+    {"label": "Overdue", "endpoint": "overdue", "roles": ["member", "manager"], "icon": None},
+    {"label": "My Chats", "endpoint": "my_chats", "roles": ["member", "manager"], "icon": None},
     {"label": "My Shifts", "endpoint": "my_shifts", "roles": ["member", "manager"], "icon": None},
     {"label": "Settings", "endpoint": "settings", "roles": ["member", "manager"], "icon": None},
 
-    {"label": "Task Manager", "endpoint": "tasks_page", "roles": ["manager"], "icon": None},
-    {"label": "Team Member Manager", "endpoint": "team_member_manager", "roles": ["manager"], "icon": None},
+    {"label": "Task Manager", "endpoint": "task_manager", "roles": ["manager"], "icon": None},
+    {"label": "Team Member Manager", "endpoint": "team_manager", "roles": ["manager"], "icon": None},
     {"label": "Group Chat Manager", "endpoint": "group_chat_manager", "roles": ["manager"], "icon": None},
     {"label": "Title Manager", "endpoint": "title_manager", "roles": ["manager"], "icon": None},
-    {"label": "Shifts", "endpoint": "view_shifts", "roles": ["manager"], "icon": None},
+    {"label": "Shifts", "endpoint": "shifts", "roles": ["manager"], "icon": None},
 ]
+
 
 
 
@@ -409,7 +410,7 @@ def reset_password(token):
     return render_template("reset.html", token=token)
 
 # ─────────────────────────────── Home / Dashboard ─────────────────────────────
-@app.route("/")
+@app.route("/", endpoint="dashboard")
 @login_required
 def index():
     username = session["username"]
@@ -715,7 +716,7 @@ def edit(task_id):
                 return render_template("edit.html", task=t, task_id=task_id, assignable_users=assignable)
     return redirect(url_for("tasks_page" if role=="manager" else "index"))
 
-@app.route("/tasks")
+@app.route("/tasks", endpoint="task_manager")
 @manager_required
 def tasks_page():
     # Managers only view (sidebar for managers shows this link)
@@ -759,7 +760,7 @@ def create_task_page():
     return render_template("create_task.html", assignable_users=assignable)
 
 # ─────────────────────────────── Shifts ───────────────────────────────
-@app.route("/shifts")
+@app.route("/shifts", endpoint="shifts")
 @manager_required
 def view_shifts():
     return render_template("shifts.html", shifts=load_shifts())
@@ -790,7 +791,7 @@ def my_shifts():
     return render_template("my_shifts.html", shifts=sh)
 
 # ─────────────────────────────── Team / Titles ───────────────────────────────
-@app.route("/members")
+@app.route("/members", endpoint="team_manager")
 @manager_required
 def team_member_manager():
     return render_template("team_manager.html", users=load_users())
@@ -842,7 +843,7 @@ def update_titles():
     return redirect(url_for("title_manager"))
 
 # ─────────────────────────────── Calendar ───────────────────────────────
-@app.route("/calendar")
+@app.route("/calendar", endpoint="calendar")
 @login_required
 def calendar_view():
     return render_template("calendar.html", role=session.get("role","member"))
@@ -995,7 +996,7 @@ def settings_update():
     return redirect(url_for("settings"))
 
 # ─────────────────────────────── Overdue ───────────────────────────────
-@app.route("/overdue")
+@app.route("/overdue", endpoint="overdue")
 @login_required
 def overdue_tasks():
     username = session["username"]
@@ -1033,19 +1034,45 @@ def overdue_tasks():
     return render_template("overdue.html", overdue=overdue_entries)
 
 # ─────────────────────────────── Group Chats ───────────────────────────────
-@app.route("/groups")
+@app.route("/groups", methods=["GET", "POST"])
 @manager_required
 def group_chat_manager():
     groups = load_groups()
     users  = load_users()
     supervisors = [u for u in users if any(t.lower()=="supervisor" for t in u.get("titles",[]))]
+
+    if request.method == "POST":
+        name = (request.form.get("group_name") or "").strip()
+        supervisor = (request.form.get("supervisor") or "").strip().lower()
+
+        if not name or not supervisor:
+            flash("Group name and supervisor are required.")
+        else:
+            user_lookup = {u["username"].lower(): u for u in users}
+            supervisor_user = user_lookup.get(supervisor)
+            if supervisor_user is None:
+                flash("Selected supervisor no longer exists.")
+            elif any((g.get("name") or "").strip().lower() == name.lower() for g in groups):
+                flash("A group with that name already exists.")
+            else:
+                new_group = {
+                    "id": str(uuid.uuid4()),
+                    "name": name,
+                    "supervisor": supervisor,
+                    "members": [supervisor],
+                }
+                groups.append(new_group)
+                save_groups(groups)
+                flash("Group created.")
+                return redirect(url_for("group_chat_manager"))
+
     return render_template("group_chat_manager.html",
                            groups=groups,
                            supervisors=supervisors,
                            users=users)
 
 # Member-facing chats hub (non-managers list only their groups)
-@app.route("/chats")
+@app.route("/chats", endpoint="my_chats")
 @login_required
 def chats():
     user = session["username"]
@@ -1087,7 +1114,7 @@ def view_group(group_id):
     grp  = next((g for g in gs if g["id"]==group_id), None)
     if not grp or (role!="manager" and user not in grp.get("members",[])):
         # Non-members/managers: bounce to the appropriate hub
-        return redirect(url_for("group_chat_manager" if role=="manager" else "chats"))
+        return redirect(url_for("group_chat_manager" if role=="manager" else "my_chats"))
 
     tasks    = load_group_tasks().get(group_id,[])
     messages = load_group_messages().get(group_id,[])
@@ -1314,7 +1341,21 @@ def toggle_group_task(group_id, idx):
     flash("Status updated.")
     return redirect(url_for("view_group",group_id=group_id))
 
-# ─────────────────────────────── Run ───────────────────────────────
+LEGACY_ENDPOINT_ALIASES = [
+    ("/", "dashboard", "index"),
+    ("/calendar", "calendar", "calendar_view"),
+    ("/overdue", "overdue", "overdue_tasks"),
+    ("/chats", "my_chats", "chats"),
+    ("/tasks", "task_manager", "tasks_page"),
+    ("/members", "team_manager", "team_member_manager"),
+    ("/shifts", "shifts", "view_shifts"),
+]
+
+for rule, canonical, legacy in LEGACY_ENDPOINT_ALIASES:
+    if canonical in app.view_functions and legacy not in app.view_functions:
+        app.add_url_rule(rule, endpoint=legacy, view_func=app.view_functions[canonical])
+
+# ------------- Run -------------
 if __name__ == "__main__":
     env = os.environ.get("FLASK_ENV", "production").lower()
     debug_env = os.environ.get("DEBUG")
