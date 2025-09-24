@@ -10,28 +10,31 @@
 <body>
   {% set authed = session.get('username') %}
   {% set role_for_layout = current_role if authed else 'member' %}
-  <div class="dashboard-grid{% if role_for_layout == 'manager' %} manager{% endif %}">
-    {% if ((show_sidebar is not defined) and authed) or (show_sidebar and authed) %}
-      {% include "_sidebar.html" %}
-    {% endif %}
-    <div class="main-content">
-      {% with messages = get_flashed_messages() %}
-        {% if messages %}
-          <div class="flash-area">
-            {% for message in messages %}
-              <div class="flash">{{ message }}</div>
-            {% endfor %}
+  <div class="app-shell">
+    <div class="dashboard-grid{% if role_for_layout == 'manager' %} manager{% endif %}">
+      {% if ((show_sidebar is not defined) and authed) or (show_sidebar and authed) %}
+        {% include "_sidebar.html" %}
+      {% endif %}
+      <main id="content" class="main-content">
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="flash-area">
+              {% for message in messages %}
+                <div class="flash">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        {% if DEMO %}
+          <div class="demo-banner">
+            <strong>Demo Mode</strong> &mdash; data is fake and mutations are disabled.
           </div>
         {% endif %}
-      {% endwith %}
-      {% if DEMO %}
-        <div class="demo-banner">
-          <strong>Demo Mode</strong> &mdash; data is fake and mutations are disabled.
-        </div>
-      {% endif %}
-      {% block content %}{% endblock %}
+        {% block content %}{% endblock %}
+      </main>
     </div>
   </div>
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

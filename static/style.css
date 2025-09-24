@@ -190,3 +190,33 @@ form button:hover { background: #005fa3; }
   .add-form, .filter-form, .search-form { flex-direction: column; align-items: stretch; }
   .sidebar { width: 200px; }
 }
+/* ===== Responsive app shell ===== */
+.app-shell{
+  display:grid;
+  grid-template-columns: 260px 1fr;
+  gap:24px;
+  align-items:start;
+  max-width:1200px;   /* center wide content but not too wide */
+  margin:0 auto;
+  padding:24px 16px;
+}
+
+/* Keep content from shrinking too small when lots of columns/cards */
+#content{ min-width:0; }
+
+/* Sidebar quality-of-life */
+.sidebar{ position:sticky; top:16px; align-self:start; }
+.sidebar .menu-title{ font-weight:700; margin-bottom:8px; }
+.sidebar ul{ list-style:none; padding-left:0; margin:0; }
+.sidebar li{ margin:6px 0; }
+.sidebar a{ text-decoration:none; }
+.sidebar .active > a{ font-weight:700; text-decoration:underline; }
+
+/* Cards/forms should fill available width by default */
+.card, .panel, form, table{ width:100%; }
+
+/* Mobile: stack sidebar above content */
+@media (max-width: 900px){
+  .app-shell{ grid-template-columns: 1fr; gap:16px; padding:16px 12px; }
+  .sidebar{ position:static; }
+}
