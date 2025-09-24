@@ -5,14 +5,14 @@ body {
   font-family: 'Segoe UI', Tahoma, sans-serif;
   background: #eef4f9;
   margin: 0;
-  display: flex;
-  flex-direction: row;
+  /* Let .app-shell control layout */
+  display: block;
 }
 
 /* Sidebar */
 .sidebar {
   background: #ffffff;
-  width: 220px;
+  width: 260px;
   min-height: 100vh;
   padding: 20px;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
@@ -41,7 +41,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch; /* avoid centering that narrows content */
 }
 .container {
   background: #fff;
@@ -190,33 +190,40 @@ form button:hover { background: #005fa3; }
   .add-form, .filter-form, .search-form { flex-direction: column; align-items: stretch; }
   .sidebar { width: 200px; }
 }
-/* ===== Responsive app shell ===== */
+/* ===== Responsive app shell (flex) ===== */
 .app-shell{
-  display:grid;
-  grid-template-columns: 260px 1fr;
+  display:flex;
   gap:24px;
-  align-items:start;
-  max-width:1200px;   /* center wide content but not too wide */
-  margin:0 auto;
-  padding:24px 16px;
+  align-items:flex-start;
+  max-width: 1400px;       /* give the page breathing room */
+  margin: 0 auto;
+  padding: 24px 16px;
+  width: 100%;             /* prevent shrink-wrap: fill viewport width */
 }
 
-/* Keep content from shrinking too small when lots of columns/cards */
-#content{ min-width:0; }
+/* Sidebar fixed, content fluid */
+.sidebar{ flex: 0 0 260px; position:sticky; top:16px; align-self:flex-start; }
+#content{ flex: 1 1 auto; min-width: 0; }
+
+/* Cards/forms should fill available width by default */
+.card, .panel, form, table{ width:100%; }
+
+/* Bust legacy width caps that cause "squish" */
+.container, .content, .dashboard, .main, .wrapper{
+  max-width: none !important;
+  width: auto !important;
+}
+
+/* Mobile: stack sidebar above content */
+@media (max-width: 900px){
+  .app-shell{ flex-direction: column; gap:16px; padding:16px 12px; }
+  .sidebar{ position:static; width:auto; }
+}
 
 /* Sidebar quality-of-life */
-.sidebar{ position:sticky; top:16px; align-self:start; }
 .sidebar .menu-title{ font-weight:700; margin-bottom:8px; }
 .sidebar ul{ list-style:none; padding-left:0; margin:0; }
 .sidebar li{ margin:6px 0; }
 .sidebar a{ text-decoration:none; }
 .sidebar .active > a{ font-weight:700; text-decoration:underline; }
 
-/* Cards/forms should fill available width by default */
-.card, .panel, form, table{ width:100%; }
-
-/* Mobile: stack sidebar above content */
-@media (max-width: 900px){
-  .app-shell{ grid-template-columns: 1fr; gap:16px; padding:16px 12px; }
-  .sidebar{ position:static; }
-}

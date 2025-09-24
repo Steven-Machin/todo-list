@@ -11,11 +11,10 @@
   {% set authed = session.get('username') %}
   {% set role_for_layout = current_role if authed else 'member' %}
   <div class="app-shell">
-    <div class="dashboard-grid{% if role_for_layout == 'manager' %} manager{% endif %}">
-      {% if ((show_sidebar is not defined) and authed) or (show_sidebar and authed) %}
-        {% include "_sidebar.html" %}
-      {% endif %}
-      <main id="content" class="main-content">
+    {% if ((show_sidebar is not defined) and authed) or (show_sidebar and authed) %}
+      {% include "_sidebar.html" %}
+    {% endif %}
+    <main id="content" class="main-content">
         {% with messages = get_flashed_messages() %}
           {% if messages %}
             <div class="flash-area">
@@ -32,7 +31,6 @@
         {% endif %}
         {% block content %}{% endblock %}
       </main>
-    </div>
   </div>
 
   {% block scripts %}{% endblock %}
