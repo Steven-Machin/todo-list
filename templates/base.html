@@ -24,9 +24,15 @@
           </div>
         {% endif %}
       {% endwith %}
+      {% if DEMO %}
+        <div class="demo-banner">
+          <strong>Demo Mode</strong> &mdash; data is fake and mutations are disabled.
+        </div>
+      {% endif %}
       {% block content %}{% endblock %}
     </div>
   </div>
   {% block scripts %}{% endblock %}
 </body>
 </html>
+

@@ -23,20 +23,31 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "manager-task-secret")
 
+APP_MODE = os.environ.get("APP_MODE", "prod").lower()
+DEMO = APP_MODE == "demo"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
+
+os.makedirs(DATA_DIR, exist_ok=True)
+
+
+def data_path(name: str) -> str:
+    return os.path.join(DATA_DIR, name)
+
 # ─────────────────────────────── Paths / Config ───────────────────────────────
-TASKS_FILE            = "tasks.json"
-USERS_FILE            = "users.json"
-SHIFTS_FILE           = "shifts.json"
-TITLES_FILE           = "titles.json"
+TASKS_FILE            = data_path("tasks.json")
+USERS_FILE            = data_path("users.json")
+SHIFTS_FILE           = data_path("shifts.json")
+TITLES_FILE           = data_path("titles.json")
 
-GROUPS_FILE           = "group_chats.json"
-GROUP_TASKS_FILE      = "group_tasks.json"
-GROUP_MESSAGES_FILE   = "group_messages.json"
-GROUP_SEEN_FILE       = "group_seen.json"
+GROUPS_FILE           = data_path("group_chats.json")
+GROUP_TASKS_FILE      = data_path("group_tasks.json")
+GROUP_MESSAGES_FILE   = data_path("group_messages.json")
+GROUP_SEEN_FILE       = data_path("group_seen.json")
 
-REMINDERS_FILE        = "reminders.json"
-PREFERENCES_FILE      = "preferences.json"
-PASSWORD_RESETS_FILE  = "password_resets.json"   # forgot/reset flow
+REMINDERS_FILE        = data_path("reminders.json")
+PREFERENCES_FILE      = data_path("preferences.json")
+PASSWORD_RESETS_FILE  = data_path("password_resets.json")   # forgot/reset flow
 
 UPLOAD_FOLDER         = "static/uploads"
 ALLOWED_EXTS          = {"png","jpg","jpeg","gif"}
@@ -137,6 +148,14 @@ def manager_required(f):
         return f(*args, **kwargs)
     return wrapper
 
+def demo_guard(fn):
+    @wraps(fn)
+    def _w(*args, **kwargs):
+        if DEMO and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            return ("Demo mode: mutations are disabled.", 403)
+        return fn(*args, **kwargs)
+    return _w
+
 def visible_nav(role: str | None):
     role = (role or "member").lower()
     return [item for item in NAV_ITEMS if role in item["roles"]]
@@ -144,6 +163,11 @@ def visible_nav(role: str | None):
 
 def is_active(endpoint: str):
     return getattr(request, 'endpoint', None) == endpoint
+
+
+@app.context_processor
+def inject_flags():
+    return {"DEMO": DEMO, "APP_MODE": APP_MODE}
 
 
 @app.context_processor
@@ -283,6 +307,120 @@ def save_prefs(p):            save_json(PREFERENCES_FILE, p)
 def load_resets():            return load_json(PASSWORD_RESETS_FILE, {})
 def save_resets(data):        save_json(PASSWORD_RESETS_FILE, data)
 
+def seed_demo_data():
+    if not DEMO:
+        return
+
+    users = load_users()
+    tasks = load_tasks()
+    groups = load_groups()
+    if users or tasks or groups:
+        return
+
+    admin_pw = generate_password_hash(os.environ.get("DEMO_ADMIN_PASSWORD", "demo123"))
+    member_pw = generate_password_hash(os.environ.get("DEMO_MEMBER_PASSWORD", "demo123"))
+
+    demo_users = [
+        {
+            "username": "demo_admin",
+            "display_name": "Demo Admin",
+            "password": admin_pw,
+            "role": "manager",
+            "titles": ["Manager"],
+        },
+        {
+            "username": "demo_member",
+            "display_name": "Demo Member",
+            "password": member_pw,
+            "role": "member",
+            "titles": ["Team Member"],
+        },
+    ]
+
+    now_stamp = iso_minutes(datetime.now())
+    due_date = (date.today() + timedelta(days=3)).isoformat()
+
+    demo_tasks = [
+        {
+            "text": "Review the demo dashboard",
+            "done": False,
+            "priority": "High",
+            "assigned_to": "Demo Member",
+            "assigned_username": "demo_member",
+            "notes": "Walk through the tasks list and complete onboarding.",
+            "created_by": "demo_admin",
+            "created_at": now_stamp,
+            "due_date": due_date,
+        },
+        {
+            "text": "Share feedback in group chat",
+            "done": False,
+            "priority": "Medium",
+            "assigned_to": "Demo Admin",
+            "assigned_username": "demo_admin",
+            "notes": "Post an update in the demo team channel.",
+            "created_by": "demo_admin",
+            "created_at": now_stamp,
+            "due_date": due_date,
+        },
+    ]
+
+    demo_group_id = str(uuid.uuid4())
+    demo_groups = [
+        {
+            "id": demo_group_id,
+            "name": "Demo Team",
+            "supervisor": "demo_admin",
+            "members": ["demo_admin", "demo_member"],
+        }
+    ]
+
+    demo_group_tasks = {
+        demo_group_id: [
+            {
+                "text": "Welcome new teammates",
+                "priority": "Medium",
+                "recurring": "none",
+                "notes": "Keep this message pinned for future demos.",
+                "done": False,
+                "created_by": "demo_admin",
+                "created_at": now_stamp,
+            }
+        ]
+    }
+
+    demo_group_messages = {
+        demo_group_id: [
+            {
+                "sender": "demo_admin",
+                "timestamp": now_stamp,
+                "text": "Thanks for trying the demo! Explore the sidebar to see everything in action.",
+                "image": None,
+                "pinned": True,
+            },
+            {
+                "sender": "demo_member",
+                "timestamp": now_stamp,
+                "text": "Got it! I'll start with the task list and calendar.",
+                "image": None,
+                "pinned": False,
+            },
+        ]
+    }
+
+    demo_group_seen = {
+        "demo_admin": {demo_group_id: now_stamp},
+    }
+
+    save_users(demo_users)
+    save_tasks(demo_tasks)
+    save_groups(demo_groups)
+    save_group_tasks(demo_group_tasks)
+    save_group_messages(demo_group_messages)
+    save_group_seen(demo_group_seen)
+
+seed_demo_data()
+
 # ─────────────────────────────── Jinja filters ───────────────────────────────
 @app.template_filter('format_datetime')
 def format_datetime(value):
@@ -301,6 +439,7 @@ def format_datetime(value):
 
 # ─────────────────────────────── Auth ───────────────────────────────
 @app.route("/signup", methods=["GET","POST"])
+@demo_guard
 def signup():
     if request.method == "POST":
         raw = request.form["username"].strip()
@@ -345,6 +484,7 @@ def logout():
 
 # ─────────────────────────────── Forgot / Reset Password ─────────────────────
 @app.route("/forgot", methods=["GET", "POST"])
+@demo_guard
 def forgot():
     if request.method == "POST":
         uname = request.form.get("username", "").strip().lower()
@@ -369,6 +509,7 @@ def forgot():
     return render_template("forgot.html")
 
 @app.route("/reset/<token>", methods=["GET", "POST"])
+@demo_guard
 def reset_password(token):
     resets = load_resets()
     rec = resets.get(token)
@@ -494,6 +635,7 @@ def index():
 # ─────────────────────────────── Reminders ───────────────────────────────
 @app.route("/reminders/add", methods=["POST"], endpoint="add_reminder")
 @login_required
+@demo_guard
 def reminders_add():
     text = request.form.get("text","").strip()
     due  = request.form.get("due_at","").strip()
@@ -514,6 +656,7 @@ def reminders_add():
 
 @app.route("/reminders/<rid>/delete", methods=["POST"], endpoint="reminders_delete")
 @login_required
+@demo_guard
 def reminders_delete(rid):
     items = load_reminders()
     items = [r for r in items if not (r.get("id")==rid and r.get("user")==session["username"])]
@@ -523,6 +666,7 @@ def reminders_delete(rid):
 
 @app.route("/reminders/<rid>/toggle", methods=["POST"])
 @login_required
+@demo_guard
 def reminders_toggle(rid):
     items = load_reminders()
     for r in items:
@@ -585,6 +729,7 @@ def search():
 # ─────────────────────────────── Task CRUD / Manager Pages ───────────────────
 @app.route("/add", methods=["POST"])
 @login_required
+@demo_guard
 def add():
     text = request.form.get("task","").strip()
     if not text:
@@ -631,6 +776,7 @@ def add():
 
 @app.route("/toggle/<int:task_id>", methods=["POST"])
 @login_required
+@demo_guard
 def toggle(task_id):
     username = session["username"]
     role = session.get("role","member")
@@ -677,6 +823,7 @@ def remove(task_id):
 
 @app.route("/edit/<int:task_id>", methods=["GET","POST"])
 @login_required
+@demo_guard
 def edit(task_id):
     username = session["username"]
     role = session.get("role","member")
@@ -751,6 +898,7 @@ def tasks_page():
 
 @app.route("/tasks/create", methods=["GET","POST"])
 @manager_required
+@demo_guard
 def create_task_page():
     if request.method=="POST":
         return redirect(url_for("add"))
@@ -767,6 +915,7 @@ def view_shifts():
 
 @app.route("/shifts/add", methods=["GET","POST"])
 @manager_required
+@demo_guard
 def add_shift():
     if request.method=="POST":
         d = request.form.get("date")
@@ -798,6 +947,7 @@ def team_member_manager():
 
 @app.route("/titles", methods=["GET","POST"])
 @manager_required
+@demo_guard
 def title_manager():
     users = load_users()
     titles = load_titles()
@@ -824,6 +974,7 @@ def title_manager():
 
 @app.route("/titles/update", methods=["POST"])
 @manager_required
+@demo_guard
 def update_titles():
     users = load_users()
     for u in users:
@@ -969,6 +1120,7 @@ def settings():
 
 @app.route("/settings/update", methods=["POST"])
 @login_required
+@demo_guard
 def settings_update():
     user = session["username"]
 
@@ -1036,6 +1188,7 @@ def overdue_tasks():
 # ─────────────────────────────── Group Chats ───────────────────────────────
 @app.route("/groups", methods=["GET", "POST"])
 @manager_required
+@demo_guard
 def group_chat_manager():
     groups = load_groups()
     users  = load_users()
@@ -1135,6 +1288,7 @@ def view_group(group_id):
 
 @app.route("/groups/mark_all_read", methods=["POST"])
 @login_required
+@demo_guard
 def groups_mark_all_read():
     user = session["username"]
     role = session.get("role","member")
@@ -1156,6 +1310,7 @@ def groups_mark_all_read():
 
 @app.route("/groups/<group_id>/message", methods=["POST"])
 @login_required
+@demo_guard
 def post_group_message(group_id):
     text = request.form.get("message","").strip()
     img  = request.files.get("image")
@@ -1198,6 +1353,7 @@ def post_group_message(group_id):
 
 @app.route("/groups/<group_id>/pin/<int:idx>", methods=["POST"])
 @login_required
+@demo_guard
 def pin_message(group_id, idx):
     user = session["username"]
     role = session.get("role","member")
@@ -1219,6 +1375,7 @@ def pin_message(group_id, idx):
 
 @app.route("/groups/<group_id>/delete/<int:idx>", methods=["POST"])
 @login_required
+@demo_guard
 def delete_message(group_id, idx):
     user = session["username"]
     role = session.get("role","member")
@@ -1242,6 +1399,7 @@ def delete_message(group_id, idx):
 
 @app.route("/groups/<group_id>/add_member", methods=["POST"])
 @manager_required
+@demo_guard
 def add_group_member(group_id):
     gs = load_groups()
     grp = next((g for g in gs if g["id"]==group_id), None)
@@ -1255,6 +1413,7 @@ def add_group_member(group_id):
 
 @app.route("/groups/<group_id>/remove_member", methods=["POST"])
 @manager_required
+@demo_guard
 def remove_group_member(group_id):
     gs = load_groups()
     grp = next((g for g in gs if g["id"]==group_id), None)
@@ -1268,6 +1427,7 @@ def remove_group_member(group_id):
 
 @app.route("/groups/<group_id>/add_task", methods=["POST"])
 @login_required
+@demo_guard
 def add_group_task(group_id):
     text     = request.form.get("text","").strip()
     priority = request.form.get("priority","Medium")
@@ -1301,6 +1461,7 @@ def add_group_task(group_id):
 
 @app.route("/groups/<group_id>/toggle_task/<int:idx>", methods=["POST"])
 @login_required
+@demo_guard
 def toggle_group_task(group_id, idx):
     user = session["username"]
     gs   = load_groups()
