@@ -33,7 +33,7 @@
 {% block content %}
   <div class="container">
     <div class="section-head" style="margin-bottom:10px;">
-      <h1 style="margin:0;">Welcome, {{ (prefs.display_name if prefs and prefs.display_name else current_user|capitalize) }}</h1>
+      <h1 style="margin:0;">Welcome, {{ (prefs.display_name if prefs and prefs.display_name else (current_user_display or current_username|capitalize)) }}</h1>
       <form class="searchbar" method="get" action="{{ url_for('search') }}">
         <input type="search" name="q" placeholder="Search tasks, chats, and people..." required>
         <button type="submit">Search</button>

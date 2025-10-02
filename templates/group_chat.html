@@ -49,14 +49,14 @@
                 {% endif %}
 
                 <div class="msg-actions">
-                  {% if current_role == 'manager' or current_user == group.supervisor %}
+                  {% if current_role == 'manager' or current_username == group.supervisor %}
                     <form style="display:inline" method="post" action="{{ url_for('pin_message', group_id=group.id, idx=loop.index0) }}">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       <button class="pin-btn" type="submit">{% if m.pinned %}Unpin{% else %}Pin{% endif %}</button>
                     </form>
                   {% endif %}
 
-                  {% if current_role == 'manager' or current_user == m.sender %}
+                  {% if current_role == 'manager' or current_username == m.sender %}
                     <form style="display:inline" method="post" action="{{ url_for('delete_message', group_id=group.id, idx=loop.index0) }}">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       <button class="del-btn" type="submit">Delete</button>

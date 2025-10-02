@@ -1,4 +1,4 @@
-﻿# app.py
+# app.py
 from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, jsonify, abort
@@ -6,6 +6,14 @@ from flask import (
 import json, os, uuid, secrets, contextlib, tempfile
 from datetime import datetime, timedelta, date
 from functools import wraps
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    logout_user,
+    current_user,
+    login_required,
+)
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
@@ -28,6 +36,11 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.getenv("FLASK_ENV") == "production",
 )
 
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+login_manager.login_message = "Please log in first."
+
 DEBUG = os.getenv("FLASK_ENV") != "production"
 
 APP_MODE = os.environ.get("APP_MODE", "prod").lower()
@@ -41,7 +54,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 def data_path(name: str) -> str:
     return os.path.join(DATA_DIR, name)
 
-# ─────────────────────────────── Paths / Config ───────────────────────────────
+# ------------------------------- Paths / Config -------------------------------
 TASKS_FILE            = data_path("tasks.json")
 USERS_FILE            = data_path("users.json")
 SHIFTS_FILE           = data_path("shifts.json")
@@ -80,7 +93,51 @@ NAV_ITEMS = [
 
 
 
-# ─────────────────────────────── Utilities ───────────────────────────────
+# ------------------------------- Utilities -------------------------------
+# ------------------------------- Auth model -------------------------------
+class AppUser(UserMixin):
+    def __init__(self, username: str, role: str = "member", display_name: str | None = None):
+        self.id = username
+        self.username = username
+        self.role = (role or "member").lower()
+        self.display_name = display_name or username.title()
+
+    @property
+    def is_manager(self) -> bool:
+        return self.role == "manager"
+
+    @classmethod
+    def from_record(cls, record: dict):
+        username = record.get("username")
+        if not username:
+            raise ValueError("User record missing username")
+        return cls(
+            username=username,
+            role=record.get("role", "member"),
+            display_name=record.get("display_name"),
+        )
+
+
+
+
+def current_username() -> str | None:
+    if current_user.is_authenticated:
+        return current_user.username
+    return None
+
+
+def current_role() -> str:
+    if current_user.is_authenticated:
+        return getattr(current_user, "role", "member")
+    return "member"
+
+
+def require_username() -> str:
+    username = current_username()
+    if not username:
+        abort(401)
+    return username
+
 @contextlib.contextmanager
 def with_json_lock(path: str):
     lock_path = f"{path}.lock"
@@ -144,19 +201,12 @@ def save_json(path, data):
 def allowed_file(fn):
     return "." in fn and fn.rsplit(".",1)[1].lower() in ALLOWED_EXTS
 
-def login_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if "username" not in session:
-            flash("Please log in first.")
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return decorated
-
 def manager_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        if session.get("role") != "manager":
+        if not current_user.is_authenticated:
+            return login_manager.unauthorized()
+        if getattr(current_user, "role", "member") != "manager":
             flash("Managers only.")
             return redirect(url_for("index"))
         return f(*args, **kwargs)
@@ -186,9 +236,12 @@ def inject_flags():
 
 @app.context_processor
 def inject_user_ctx():
-    role = session.get("role", "member")
+    role = current_role()
+    username = current_username()
+    display = getattr(current_user, "display_name", None) if current_user.is_authenticated else None
     return {
-        "current_user": session.get("username"),
+        "current_username": username,
+        "current_user_display": display,
         "current_role": role,
         "nav_items": visible_nav(role),
         "is_active": is_active,
@@ -287,12 +340,44 @@ def assigned_to_me(task, username, users=None):
     display_name = _norm(u.get("display_name")) if u else ""
     return bool(display_name and assignee_display == display_name)
 
-# ─────────────────────────────── JSON wrappers ───────────────────────────────
+
+def task_owner(task) -> str:
+    return _norm(task.get("owner") or task.get("created_by"))
+
+
+def task_visible_to(task, username, users=None):
+    if users is None:
+        users = load_users()
+    uname = _norm(username)
+    if not uname:
+        return False
+    return task_owner(task) == uname or assigned_to_me(task, username, users)
+
+# ------------------------------- JSON wrappers -------------------------------
 def load_tasks():             return load_json(TASKS_FILE, [])
 def save_tasks(t):            save_json(TASKS_FILE, t)
 
 def load_users():             return load_json(USERS_FILE, [])
 def save_users(u):            save_json(USERS_FILE, u)
+
+def find_user_record(username: str | None):
+    if not username:
+        return None
+    uname = _norm(username)
+    if not uname:
+        return None
+    for record in load_users():
+        if _norm(record.get("username")) == uname:
+            return record
+    return None
+
+
+@login_manager.user_loader
+def load_logged_in_user(user_id: str):
+    record = find_user_record(user_id)
+    if record:
+        return AppUser.from_record(record)
+    return None
 
 def load_shifts():            return load_json(SHIFTS_FILE, [])
 def save_shifts(s):           save_json(SHIFTS_FILE, s)
@@ -447,7 +532,7 @@ def robots():
 def healthz():
     return {"ok": True, "mode": APP_MODE}, 200
 
-# ─────────────────────────────── Jinja filters ───────────────────────────────
+# ------------------------------- Jinja filters -------------------------------
 @app.template_filter('format_datetime')
 def format_datetime(value):
     """Accept ISO 'YYYY-MM-DDTHH:MM' or 12h 'YYYY-MM-DDT%I:%M %p' and format nicely."""
@@ -463,7 +548,7 @@ def format_datetime(value):
             return value
     return dt.strftime("%b %d, %Y %I:%M %p")
 
-# ─────────────────────────────── Auth ───────────────────────────────
+# ------------------------------- Auth -------------------------------
 @app.route("/signup", methods=["GET","POST"])
 @demo_guard
 def signup():
@@ -491,24 +576,24 @@ def login():
     if request.method == "POST":
         uname = request.form["username"].strip().lower()
         pwd = request.form["password"]
-        users = load_users()
-        user = next((u for u in users if u["username"] == uname), None)
-        if user and check_password_hash(user["password"], pwd):
-            session["username"] = uname
-            session["role"] = user.get("role","member")
+        record = find_user_record(uname)
+        if record and check_password_hash(record["password"], pwd):
+            login_user(AppUser.from_record(record))
             flash("Logged in.")
             return redirect(url_for("index"))
         flash("Invalid credentials.")
     return render_template("login.html")
 
 @app.route("/logout")
+@login_required
 def logout():
     # The "Are you sure?" confirmation is implemented in templates via onclick confirm()
+    logout_user()
     session.clear()
     flash("You have been logged out.")
     return redirect(url_for("login"))
 
-# ─────────────────────────────── Forgot / Reset Password ─────────────────────
+# ------------------------------- Forgot / Reset Password ---------------------
 @app.route("/forgot", methods=["GET", "POST"])
 @demo_guard
 def forgot():
@@ -576,12 +661,12 @@ def reset_password(token):
 
     return render_template("reset.html", token=token)
 
-# ─────────────────────────────── Home / Dashboard ─────────────────────────────
+# ------------------------------- Home / Dashboard -----------------------------
 @app.route("/", endpoint="dashboard")
 @login_required
 def index():
-    username = session["username"]
-    role = session.get("role","member")
+    username = require_username()
+    role = current_role()
     today = date.today()
 
     users = load_users()
@@ -597,7 +682,7 @@ def index():
 
     # visible tasks
     visible = tasks_all if role == "manager" else [
-        t for t in tasks_all if assigned_to_me(t, username, users)
+        t for t in tasks_all if task_visible_to(t, username, users)
     ]
 
     assignees = sorted({t.get("assigned_to") for t in tasks_all if t.get("assigned_to")})
@@ -658,7 +743,7 @@ def index():
         prefs=prefs
     )
 
-# ─────────────────────────────── Reminders ───────────────────────────────
+# ------------------------------- Reminders -------------------------------
 @app.route("/reminders/add", methods=["POST"], endpoint="add_reminder")
 @login_required
 @demo_guard
@@ -669,9 +754,10 @@ def reminders_add():
         flash("Reminder text required.")
         return redirect(url_for("index"))
     items = load_reminders()
+    username = require_username()
     items.append({
         "id": str(uuid.uuid4()),
-        "user": session["username"],
+        "user": username,
         "text": text,
         "due_at": due,
         "done": False
@@ -685,7 +771,8 @@ def reminders_add():
 @demo_guard
 def reminders_delete(rid):
     items = load_reminders()
-    items = [r for r in items if not (r.get("id")==rid and r.get("user")==session["username"])]
+    username = require_username()
+    items = [r for r in items if not (r.get("id")==rid and r.get("user")==username)]
     save_reminders(items)
     flash("Reminder deleted.")
     return redirect(url_for("index"))
@@ -695,20 +782,21 @@ def reminders_delete(rid):
 @demo_guard
 def reminders_toggle(rid):
     items = load_reminders()
+    username = require_username()
     for r in items:
-        if r.get("id")==rid and r.get("user")==session["username"]:
+        if r.get("id")==rid and r.get("user")==username:
             r["done"] = not r.get("done", False)
             break
     save_reminders(items)
     return redirect(url_for("index"))
 
-# ─────────────────────────────── Global Search ───────────────────────────────
+# ------------------------------- Global Search -------------------------------
 @app.route("/search")
 @login_required
 def search():
     q = request.args.get("q","").strip().lower()
-    user = session["username"]
-    role = session.get("role","member")
+    user = require_username()
+    role = current_role()
 
     users = load_users()
     uname_to_disp = {u["username"]: u.get("display_name") or u["username"].title() for u in users}
@@ -716,7 +804,7 @@ def search():
     # tasks (respect visibility)
     ts_all = load_tasks()
     if role != "manager":
-        ts_all = [t for t in ts_all if assigned_to_me(t, user, users) or _norm(t.get("created_by")) == _norm(user)]
+        ts_all = [t for t in ts_all if task_visible_to(t, user, users)]
     task_hits = [
         (i, t) for i, t in enumerate(ts_all)
         if q and (q in (t.get("text","").lower()) or q in (t.get("notes","").lower()) or q in (t.get("assigned_to","").lower()))
@@ -752,7 +840,7 @@ def search():
                            msg_hits=msg_hits,
                            user_hits=user_hits)
 
-# ─────────────────────────────── Task CRUD / Manager Pages ───────────────────
+# ------------------------------- Task CRUD / Manager Pages -------------------
 @app.route("/add", methods=["POST"])
 @login_required
 @demo_guard
@@ -760,7 +848,7 @@ def add():
     text = request.form.get("task","").strip()
     if not text:
         flash("Task text required.")
-        return redirect(url_for("tasks_page" if session.get("role")=="manager" else "index"))
+        return redirect(url_for("tasks_page" if current_role()=="manager" else "index"))
 
     priority = request.form.get("priority","Medium")
     assignee_raw = request.form.get("assigned_to","").strip()
@@ -768,7 +856,7 @@ def add():
     due_date = request.form.get("due_date","").strip()
     recurring = "weekly" if request.form.get("recurring")=="weekly" else None
     notes = request.form.get("notes","").strip()
-    created_by = session["username"]
+    created_by = require_username()
 
     users = load_users()
     assignee_user = next((u for u in users if _norm(u["username"]) == assignee_key), None)
@@ -791,6 +879,7 @@ def add():
         "due_date": due_date,
         "recurring": recurring,
         "notes": notes,
+        "owner": created_by,
         "created_by": created_by,
         "created_at": datetime.now().isoformat(timespec="minutes")
     }
@@ -798,19 +887,19 @@ def add():
     ts.append(new)
     save_tasks(ts)
     flash("Task added.")
-    return redirect(url_for("tasks_page" if session.get("role")=="manager" else "index"))
+    return redirect(url_for("tasks_page" if current_role()=="manager" else "index"))
 
 @app.route("/toggle/<int:task_id>", methods=["POST"])
 @login_required
 @demo_guard
 def toggle(task_id):
-    username = session["username"]
-    role = session.get("role","member")
+    username = require_username()
+    role = current_role()
     users = load_users()
     ts = load_tasks()
     if 0<=task_id<len(ts):
         t = ts[task_id]
-        if role=="manager" or assigned_to_me(t, username, users):
+        if role=="manager" or task_visible_to(t, username, users):
             t["done"] = not t.get("done",False)
             if t["done"]:
                 t["completed_at"] = datetime.now().isoformat(timespec="minutes")
@@ -833,13 +922,13 @@ def toggle(task_id):
 @app.route("/remove/<int:task_id>")
 @login_required
 def remove(task_id):
-    username = session["username"]
-    role = session.get("role","member")
+    username = require_username()
+    role = current_role()
     users = load_users()
     ts = load_tasks()
     if 0<=task_id<len(ts):
         t = ts[task_id]
-        if role=="manager" or assigned_to_me(t, username, users):
+        if role=="manager" or task_visible_to(t, username, users):
             ts.pop(task_id)
             save_tasks(ts)
             flash("Task removed.")
@@ -851,15 +940,15 @@ def remove(task_id):
 @login_required
 @demo_guard
 def edit(task_id):
-    username = session["username"]
-    role = session.get("role","member")
+    username = require_username()
+    role = current_role()
     users = load_users()
     ts = load_tasks()
 
     if request.method=="POST":
         if 0<=task_id<len(ts):
             t = ts[task_id]
-            if role=="manager" or assigned_to_me(t, username, users):
+            if role=="manager" or task_visible_to(t, username, users):
                 t["text"] = request.form.get("task","").strip() or t.get("text","")
                 t["priority"] = request.form.get("priority","Medium")
                 if role=="manager":
@@ -884,7 +973,7 @@ def edit(task_id):
     else:
         if 0<=task_id<len(ts):
             t = ts[task_id]
-            if role=="manager" or assigned_to_me(t, username, users):
+            if role=="manager" or task_visible_to(t, username, users):
                 assignable = [u["username"] for u in users if u.get("role")!="manager"]
                 return render_template("edit.html", task=t, task_id=task_id, assignable_users=assignable)
     return redirect(url_for("tasks_page" if role=="manager" else "index"))
@@ -933,7 +1022,7 @@ def create_task_page():
     assignable = [u["username"] for u in users if u["role"]!="manager" and any(t.lower() in elig for t in u.get("titles",[]))]
     return render_template("create_task.html", assignable_users=assignable)
 
-# ─────────────────────────────── Shifts ───────────────────────────────
+# ------------------------------- Shifts -------------------------------
 @app.route("/shifts", endpoint="shifts")
 @manager_required
 def view_shifts():
@@ -961,11 +1050,11 @@ def add_shift():
 @app.route("/my-shifts")
 @login_required
 def my_shifts():
-    u = session["username"]
+    u = require_username()
     sh = [s for s in load_shifts() if _norm(s.get("assigned_to"))==_norm(u)]
     return render_template("my_shifts.html", shifts=sh)
 
-# ─────────────────────────────── Team / Titles ───────────────────────────────
+# ------------------------------- Team / Titles -------------------------------
 @app.route("/members", endpoint="team_manager")
 @manager_required
 def team_member_manager():
@@ -1019,11 +1108,11 @@ def update_titles():
     flash("Titles updated.")
     return redirect(url_for("title_manager"))
 
-# ─────────────────────────────── Calendar ───────────────────────────────
+# ------------------------------- Calendar -------------------------------
 @app.route("/calendar", endpoint="calendar")
 @login_required
 def calendar_view():
-    return render_template("calendar.html", role=session.get("role","member"))
+    return render_template("calendar.html", role=current_role())
 
 # New unified feed (tasks + shifts), supports ?scope=my|all
 @app.route("/api/calendar")
@@ -1033,8 +1122,8 @@ def calendar_feed():
     if raw_scope not in {"my", "all"}:
         raw_scope = "my"
 
-    user = session["username"]
-    role = session.get("role", "member")
+    user = require_username()
+    role = current_role()
     show_all = raw_scope == "all" and role == "manager"
 
     users = load_users()
@@ -1042,7 +1131,7 @@ def calendar_feed():
     # tasks
     t_all = load_tasks()
     tasks = t_all if show_all else [
-        t for t in t_all if assigned_to_me(t, user, users)
+        t for t in t_all if task_visible_to(t, user, users)
     ]
 
     def normalize_event_start(raw):
@@ -1089,7 +1178,7 @@ def calendar_feed():
 
     return jsonify(events)
 
-# Legacy (tasks only) – kept for backward compatibility
+# Legacy (tasks only) � kept for backward compatibility
 @app.route("/api/tasks/events")
 @login_required
 def task_events():
@@ -1112,11 +1201,11 @@ def task_events():
             })
     return jsonify(evts)
 
-# ─────────────────────────────── Settings ───────────────────────────────
+# ------------------------------- Settings -------------------------------
 @app.route("/settings", methods=["GET"])
 @login_required
 def settings():
-    user = session["username"]
+    user = require_username()
 
     # load prefs (with defaults)
     prefs_all = load_prefs()
@@ -1148,7 +1237,7 @@ def settings():
 @login_required
 @demo_guard
 def settings_update():
-    user = session["username"]
+    user = require_username()
 
     # 1) Save preferences
     prefs_all = load_prefs()
@@ -1173,12 +1262,12 @@ def settings_update():
     flash("Settings saved.")
     return redirect(url_for("settings"))
 
-# ─────────────────────────────── Overdue ───────────────────────────────
+# ------------------------------- Overdue -------------------------------
 @app.route("/overdue", endpoint="overdue")
 @login_required
 def overdue_tasks():
-    username = session["username"]
-    role = session.get("role", "member")
+    username = require_username()
+    role = current_role()
     today = date.today()
 
     users = load_users()
@@ -1189,7 +1278,7 @@ def overdue_tasks():
         if task.get("done"):
             continue
 
-        if role != "manager" and not assigned_to_me(task, username, users):
+        if role != "manager" and not task_visible_to(task, username, users):
             continue
 
         due_raw = task.get("due") or task.get("due_date") or ""
@@ -1211,7 +1300,7 @@ def overdue_tasks():
 
     return render_template("overdue.html", overdue=overdue_entries)
 
-# ─────────────────────────────── Group Chats ───────────────────────────────
+# ------------------------------- Group Chats -------------------------------
 @app.route("/groups", methods=["GET", "POST"])
 @manager_required
 @demo_guard
@@ -1254,8 +1343,8 @@ def group_chat_manager():
 @app.route("/chats", endpoint="my_chats")
 @login_required
 def chats():
-    user = session["username"]
-    role = session.get("role", "member")
+    user = require_username()
+    role = current_role()
     if role == "manager":
         # Managers manage chats in the admin view
         return redirect(url_for("group_chat_manager"))
@@ -1287,8 +1376,8 @@ def chats():
 @app.route("/groups/<group_id>")
 @login_required
 def view_group(group_id):
-    user = session["username"]
-    role = session.get("role","member")
+    user = require_username()
+    role = current_role()
     gs   = load_groups()
     grp  = next((g for g in gs if g["id"]==group_id), None)
     if not grp or (role!="manager" and user not in grp.get("members",[])):
@@ -1316,8 +1405,8 @@ def view_group(group_id):
 @login_required
 @demo_guard
 def groups_mark_all_read():
-    user = session["username"]
-    role = session.get("role","member")
+    user = require_username()
+    role = current_role()
     groups = load_groups()
     msgs_by_group = load_group_messages()
 
@@ -1342,8 +1431,8 @@ def post_group_message(group_id):
     img  = request.files.get("image")
 
     # membership (managers can always post)
-    user = session["username"]
-    role = session.get("role","member")
+    user = require_username()
+    role = current_role()
     group = next((g for g in load_groups() if g["id"] == group_id), None)
     if not group or (role != "manager" and user not in group.get("members", [])):
         flash("Not authorized.")
@@ -1381,8 +1470,8 @@ def post_group_message(group_id):
 @login_required
 @demo_guard
 def pin_message(group_id, idx):
-    user = session["username"]
-    role = session.get("role","member")
+    user = require_username()
+    role = current_role()
     groups = load_groups()
     grp = next((g for g in groups if g["id"]==group_id), None)
     if not grp:
@@ -1403,8 +1492,8 @@ def pin_message(group_id, idx):
 @login_required
 @demo_guard
 def delete_message(group_id, idx):
-    user = session["username"]
-    role = session.get("role","member")
+    user = require_username()
+    role = current_role()
 
     groups = load_groups()
     grp = next((g for g in groups if g["id"] == group_id), None)
@@ -1463,8 +1552,8 @@ def add_group_task(group_id):
         return redirect(url_for("view_group",group_id=group_id))
 
     # members or managers only
-    user = session["username"]
-    role = session.get("role","member")
+    user = require_username()
+    role = current_role()
     grp  = next((g for g in load_groups() if g["id"]==group_id), None)
     if not grp or (role!="manager" and user not in grp.get("members",[])):
         flash("Not authorized.")
@@ -1489,7 +1578,7 @@ def add_group_task(group_id):
 @login_required
 @demo_guard
 def toggle_group_task(group_id, idx):
-    user = session["username"]
+    user = require_username()
     gs   = load_groups()
     grp  = next((g for g in gs if g["id"]==group_id), None)
     if not grp or user not in grp.get("members",[]):
