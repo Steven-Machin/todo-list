@@ -16,6 +16,22 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    create_engine,
+    delete,
+)
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 
 try:
@@ -74,6 +90,71 @@ ALLOWED_EXTS          = {"png","jpg","jpeg","gif"}
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+USE_DATABASE = os.getenv("USE_DATABASE", "1").strip().lower() not in {"0", "false", "no"}
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("SQLALCHEMY_DATABASE_URI")
+DEFAULT_SQLITE_URL = f"sqlite:///{data_path('todo.db')}"
+
+if not DATABASE_URL and USE_DATABASE:
+    DATABASE_URL = DEFAULT_SQLITE_URL
+
+DB_ENABLED = bool(USE_DATABASE and DATABASE_URL)
+
+SessionLocal: Optional[sessionmaker] | None = None
+UserModel = None
+TaskModel = None
+Base = None
+
+if DB_ENABLED:
+    engine_kwargs: dict[str, Any] = {"future": True}
+    if str(DATABASE_URL).startswith("sqlite"):
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+        pool_pre_ping = False
+    else:
+        pool_pre_ping = True
+    engine = create_engine(DATABASE_URL, pool_pre_ping=pool_pre_ping, **engine_kwargs)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False, future=True)
+    Base = declarative_base()
+
+    class UserModel(Base):
+        __tablename__ = "users"
+        username = Column(String(80), primary_key=True)
+        display_name = Column(String(120))
+        password_hash = Column(String(255))
+        role = Column(String(20), default="member", nullable=False)
+        titles = Column(JSON, default=list)
+        extra = Column(JSON)
+
+        tasks_created = relationship("TaskModel", back_populates="owner", foreign_keys="TaskModel.owner_username")
+        tasks_assigned = relationship("TaskModel", back_populates="assignee", foreign_keys="TaskModel.assigned_username")
+
+    class TaskModel(Base):
+        __tablename__ = "tasks"
+        id = Column(Integer, primary_key=True)
+        text = Column(String(255), nullable=False)
+        done = Column(Boolean, default=False, nullable=False)
+        priority = Column(String(20), default="Medium")
+        notes = Column(Text)
+        due_date = Column(Date)
+        recurring = Column(String(32))
+        created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+        completed_at = Column(DateTime)
+        overdue = Column(Boolean, default=False, nullable=False)
+        assigned_username = Column(String(80), ForeignKey("users.username", ondelete="SET NULL"))
+        assigned_display = Column(String(120))
+        owner_username = Column(String(80), ForeignKey("users.username", ondelete="SET NULL"))
+        completed_by_username = Column(String(80), ForeignKey("users.username", ondelete="SET NULL"))
+        position = Column(Integer, default=0, nullable=False)
+        extra = Column(JSON)
+
+        assignee = relationship("UserModel", foreign_keys=[assigned_username], back_populates="tasks_assigned")
+        owner = relationship("UserModel", foreign_keys=[owner_username], back_populates="tasks_created")
+        completed_by = relationship("UserModel", foreign_keys=[completed_by_username])
+
+    Base.metadata.create_all(bind=engine)
+else:
+    Base = None
+    SessionLocal = None
 
 NAV_ITEMS = [
     {"label": "Home", "endpoint": "dashboard", "roles": ["member", "manager"], "icon": None},
@@ -353,12 +434,211 @@ def task_visible_to(task, username, users=None):
         return False
     return task_owner(task) == uname or assigned_to_me(task, username, users)
 
-# ------------------------------- JSON wrappers -------------------------------
-def load_tasks():             return load_json(TASKS_FILE, [])
-def save_tasks(t):            save_json(TASKS_FILE, t)
+# ------------------------------- Persistence helpers -------------------------------
+TASK_PERSISTED_KEYS = {
+    "text",
+    "done",
+    "priority",
+    "assigned_to",
+    "assigned_username",
+    "notes",
+    "owner",
+    "created_by",
+    "created_at",
+    "due_date",
+    "recurring",
+    "overdue",
+    "completed_at",
+    "completed_by",
+}
 
-def load_users():             return load_json(USERS_FILE, [])
-def save_users(u):            save_json(USERS_FILE, u)
+USER_PERSISTED_KEYS = {"username", "display_name", "password", "role", "titles"}
+
+
+def _optional_username(value: Optional[str]) -> Optional[str]:
+    normed = _norm(value)
+    return normed or None
+
+
+def _user_to_dict(model: "UserModel") -> Dict[str, Any]:
+    data: Dict[str, Any] = {
+        "username": model.username,
+        "display_name": model.display_name,
+        "password": model.password_hash,
+        "role": (model.role or "member"),
+        "titles": list(model.titles or []),
+    }
+    if model.extra:
+        for key, value in model.extra.items():
+            data.setdefault(key, value)
+    return data
+
+
+def _task_to_dict(model: "TaskModel") -> Dict[str, Any]:
+    data: Dict[str, Any] = {}
+    if model.extra:
+        data.update(model.extra)
+
+    data["text"] = model.text
+    data["done"] = bool(model.done)
+    data["priority"] = model.priority or "Medium"
+    data["notes"] = model.notes or ""
+
+    assigned_display = model.assigned_display
+    if not assigned_display and model.assignee:
+        assigned_display = model.assignee.display_name or model.assignee.username.title()
+    data["assigned_to"] = assigned_display or ""
+    data["assigned_username"] = model.assigned_username
+
+    owner_username = model.owner_username or ""
+    data["owner"] = owner_username
+    data["created_by"] = owner_username
+
+    data["overdue"] = bool(model.overdue)
+
+    if model.due_date:
+        data["due_date"] = model.due_date.isoformat()
+    if model.recurring is not None:
+        data["recurring"] = model.recurring
+    else:
+        data.setdefault("recurring", None)
+
+    if model.created_at:
+        data["created_at"] = iso_minutes(model.created_at)
+    if model.completed_at:
+        data["completed_at"] = iso_minutes(model.completed_at)
+
+    if model.completed_by_username:
+        data["completed_by"] = model.completed_by_username
+
+    return data
+
+
+def load_tasks() -> List[Dict[str, Any]]:
+    if not DB_ENABLED or SessionLocal is None:
+        return load_json(TASKS_FILE, [])
+    with SessionLocal() as session:
+        rows = (
+            session.query(TaskModel)
+            .order_by(TaskModel.position, TaskModel.id)
+            .all()
+        )
+        if not rows:
+            return load_json(TASKS_FILE, [])
+        return [_task_to_dict(row) for row in rows]
+
+
+def save_tasks(tasks: List[Dict[str, Any]]):
+    if not DB_ENABLED or SessionLocal is None:
+        save_json(TASKS_FILE, tasks)
+        return
+
+    tasks = tasks or []
+    with SessionLocal.begin() as session:
+        session.execute(delete(TaskModel))
+        session.flush()
+        valid_usernames = {row.username for row in session.query(UserModel).all()}
+        for idx, record in enumerate(tasks):
+            if not isinstance(record, dict):
+                continue
+            assigned_username = _optional_username(record.get("assigned_username"))
+            owner_username = _optional_username(record.get("owner") or record.get("created_by"))
+            completed_by_username = _optional_username(record.get("completed_by"))
+
+            if assigned_username and assigned_username not in valid_usernames:
+                assigned_username = None
+            if owner_username and owner_username not in valid_usernames:
+                owner_username = None
+            if completed_by_username and completed_by_username not in valid_usernames:
+                completed_by_username = None
+
+            due_date = parse_date(record.get("due_date")) if record.get("due_date") else None
+            created_at = parse_dt_any(record.get("created_at")) or datetime.utcnow()
+            completed_at = parse_dt_any(record.get("completed_at")) if record.get("completed_at") else None
+
+            priority = record.get("priority") or "Medium"
+            recurring = record.get("recurring") or None
+            notes = record.get("notes") or None
+            assigned_display = record.get("assigned_to") or None
+            overdue = bool(record.get("overdue", False))
+            extra = {k: v for k, v in record.items() if k not in TASK_PERSISTED_KEYS}
+
+            task = TaskModel(
+                text=record.get("text") or "",
+                done=bool(record.get("done", False)),
+                priority=priority,
+                notes=notes,
+                due_date=due_date,
+                recurring=recurring,
+                created_at=created_at,
+                completed_at=completed_at,
+                overdue=overdue,
+                assigned_username=assigned_username,
+                assigned_display=assigned_display,
+                owner_username=owner_username,
+                completed_by_username=completed_by_username,
+                position=idx,
+                extra=extra or None,
+            )
+            session.add(task)
+
+
+def load_users() -> List[Dict[str, Any]]:
+    if not DB_ENABLED or SessionLocal is None:
+        return load_json(USERS_FILE, [])
+    with SessionLocal() as session:
+        rows = session.query(UserModel).order_by(UserModel.username).all()
+        if not rows:
+            return load_json(USERS_FILE, [])
+        return [_user_to_dict(row) for row in rows]
+
+
+def save_users(users: List[Dict[str, Any]]):
+    if not DB_ENABLED or SessionLocal is None:
+        save_json(USERS_FILE, users)
+        return
+
+    users = users or []
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for entry in users:
+        if not isinstance(entry, dict):
+            continue
+        uname = _norm(entry.get("username"))
+        if not uname:
+            continue
+        data = dict(entry)
+        data["username"] = uname
+        normalized[uname] = data
+
+    with SessionLocal.begin() as session:
+        existing = {row.username: row for row in session.query(UserModel).all()}
+        for uname, data in normalized.items():
+            titles = list(data.get("titles") or [])
+            role = (data.get("role") or "member").lower()
+            extra = {k: v for k, v in data.items() if k not in USER_PERSISTED_KEYS}
+
+            record = existing.pop(uname, None)
+            if record:
+                record.display_name = data.get("display_name")
+                record.password_hash = data.get("password")
+                record.role = role
+                record.titles = titles
+                record.extra = extra or None
+            else:
+                session.add(
+                    UserModel(
+                        username=uname,
+                        display_name=data.get("display_name"),
+                        password_hash=data.get("password"),
+                        role=role,
+                        titles=titles,
+                        extra=extra or None,
+                    )
+                )
+
+        for stale in existing.values():
+            session.delete(stale)
+
 
 def find_user_record(username: str | None):
     if not username:
@@ -366,7 +646,15 @@ def find_user_record(username: str | None):
     uname = _norm(username)
     if not uname:
         return None
-    for record in load_users():
+
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal() as session:
+            record = session.get(UserModel, uname)
+            if record:
+                return _user_to_dict(record)
+            return None
+
+    for record in load_json(USERS_FILE, []):
         if _norm(record.get("username")) == uname:
             return record
     return None
