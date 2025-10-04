@@ -40,6 +40,17 @@
           <input class="form-control" id="due_date" type="date" name="due_date" value="{{ due_value }}">
         </div>
 
+        {% set recurrence_value = task.recurring or '' %}
+        <div class="col-md-4">
+          <label class="form-label" for="recurring">Repeat</label>
+          <select class="form-select" id="recurring" name="recurring">
+            <option value="" {% if not recurrence_value %}selected{% endif %}>Does not repeat</option>
+            <option value="daily" {% if recurrence_value == 'daily' %}selected{% endif %}>Daily</option>
+            <option value="weekly" {% if recurrence_value == 'weekly' %}selected{% endif %}>Weekly</option>
+            <option value="monthly" {% if recurrence_value == 'monthly' %}selected{% endif %}>Monthly</option>
+          </select>
+        </div>
+
         <div class="col-12">
           <label class="form-label" for="tags">Tags</label>
           <input class="form-control" id="tags" type="text" name="tags" value="{{ task.tags|join(', ') }}" placeholder="Example: payroll, q2, vip">

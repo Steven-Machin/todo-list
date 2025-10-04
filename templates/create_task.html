@@ -43,11 +43,15 @@
           <div class="form-text">Separate tags with commas.{% if all_tags %} Existing tags: {{ all_tags|join(', ') }}.{% endif %}</div>
         </div>
 
-        <div class="col-12">
-          <div class="form-check">
-            <input class="form-check-input" id="recurring" type="checkbox" name="recurring" value="weekly">
-            <label class="form-check-label" for="recurring">Repeat weekly</label>
-          </div>
+        <div class="col-md-4">
+          <label class="form-label" for="recurring">Repeat</label>
+          <select class="form-select" id="recurring" name="recurring">
+            <option value="">Does not repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <div class="form-text">Completed recurring tasks will schedule the next due date automatically.</div>
         </div>
 
         <div class="col-12">

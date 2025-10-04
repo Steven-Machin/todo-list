@@ -170,7 +170,7 @@
               {% for t in overdue_list[:5] %}
                 <li>
                   <div style="font-weight:600;">{{ t.text }} <span class="chip chip-overdue">overdue</span></div>
-                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}</div>
+                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}{% if t.recurring %} - Repeats {{ t.recurring|title }}{% endif %}</div>
                 </li>
               {% endfor %}
             </ul>
@@ -186,7 +186,7 @@
               {% for t in today[:5] %}
                 <li>
                   <div style="font-weight:600;">{{ t.text }} <span class="chip chip-today">today</span></div>
-                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}</div>
+                  <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}{% if t.recurring %} - Repeats {{ t.recurring|title }}{% endif %}</div>
                 </li>
               {% endfor %}
             </ul>
@@ -206,7 +206,7 @@
                   {{ t.text }}
                   <span class="chip chip-prio">{{ t.priority }}</span>
                 </div>
-                <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}</div>
+                <div class="muted">Assigned to {{ t.assigned_to }}{% if t.due_date or t.due %} - Due {{ (t.due or t.due_date) }}{% endif %}{% if t.recurring %} - Repeats {{ t.recurring|title }}{% endif %}</div>
               </li>
             {% endfor %}
           </ul>

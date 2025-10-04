@@ -73,9 +73,22 @@
         },
         eventClick: function(info) {
           const e = info.event;
-          const type = (e.extendedProps && e.extendedProps.type) ? e.extendedProps.type : 'event';
+          const props = e.extendedProps || {};
+          const type = props.type ? props.type : 'event';
           const when = e.start ? new Date(e.start).toLocaleString() : 'N/A';
-          alert(`${type.toUpperCase()}\n\n${e.title}\nWhen: ${when}`);
+          const lines = [
+            type.toUpperCase(),
+            '',
+            e.title,
+            `When: ${when}`
+          ];
+          if (props.assigned_to) {
+            lines.push(`Assigned to: ${props.assigned_to}`);
+          }
+          if (props.recurring) {
+            lines.push(`Repeats: ${props.recurring}`);
+          }
+          alert(lines.join('\n'));
         }
       });
 

@@ -120,6 +120,9 @@
                       {% if due_value %}
                         <span>Due {{ due_value }}</span>
                       {% endif %}
+                      {% if task.recurring %}
+                        <span>Repeats {{ task.recurring|title }}</span>
+                      {% endif %}
                       {% if task.completed_at %}
                         <span>Completed {{ task.completed_at|format_datetime }}</span>
                       {% endif %}

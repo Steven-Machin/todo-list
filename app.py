@@ -3,6 +3,7 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, jsonify, abort
 )
+import calendar
 import json, os, uuid, secrets, contextlib, tempfile
 from datetime import datetime, timedelta, date
 from functools import wraps
@@ -351,11 +352,44 @@ def normalize_tags(value: Any) -> list[str]:
     token = str(value).strip()
     return [token] if token else []
 
+VALID_RECURRENCE = {"daily", "weekly", "monthly"}
+
+def normalize_recurring(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text_val = value.strip().lower()
+    else:
+        text_val = str(value).strip().lower()
+    if not text_val or text_val in {"none", "no", "false"}:
+        return None
+    if text_val in VALID_RECURRENCE:
+        return text_val
+    if text_val in {"yes", "true"}:
+        return "weekly"
+    return None
+
+def next_recurring_due_date(current: date, pattern: str) -> Optional[date]:
+    freq = normalize_recurring(pattern)
+    if not freq:
+        return None
+    if freq == "daily":
+        return current + timedelta(days=1)
+    if freq == "weekly":
+        return current + timedelta(weeks=1)
+    if freq == "monthly":
+        month = current.month + 1
+        year = current.year + (month - 1) // 12
+        month = ((month - 1) % 12) + 1
+        last_day = calendar.monthrange(year, month)[1]
+        return date(year, month, min(current.day, last_day))
+    return None
 
 def apply_task_defaults(task: Dict[str, Any]) -> Dict[str, Any]:
     """Ensure optional fields exist on task dictionaries."""
     task.setdefault("tags", [])
     task["tags"] = normalize_tags(task.get("tags"))
+    task["recurring"] = normalize_recurring(task.get("recurring"))
     return task
 
 
@@ -564,6 +598,7 @@ def save_tasks(tasks: List[Dict[str, Any]]):
             continue
         item = dict(record)
         item["tags"] = normalize_tags(item.get("tags"))
+        item["recurring"] = normalize_recurring(item.get("recurring"))
         normalized.append(item)
 
     if not DB_ENABLED or SessionLocal is None:
@@ -591,7 +626,7 @@ def save_tasks(tasks: List[Dict[str, Any]]):
             completed_at = parse_dt_any(item.get("completed_at")) if item.get("completed_at") else None
 
             priority = item.get("priority") or "Medium"
-            recurring = item.get("recurring") or None
+            recurring = normalize_recurring(item.get("recurring"))
             notes = item.get("notes") or None
             assigned_display = item.get("assigned_to") or None
             overdue = bool(item.get("overdue", False))
@@ -1178,7 +1213,7 @@ def add():
     assignee_raw = request.form.get("assigned_to","").strip()
     assignee_key = _norm(assignee_raw)
     due_date = request.form.get("due_date","").strip()
-    recurring = "weekly" if request.form.get("recurring")=="weekly" else None
+    recurring = normalize_recurring(request.form.get("recurring"))
     notes = request.form.get("notes","").strip()
     tags = normalize_tags(request.form.get("tags"))
     created_by = require_username()
@@ -1223,27 +1258,33 @@ def toggle(task_id):
     role = current_role()
     users = load_users()
     ts = load_tasks()
-    if 0<=task_id<len(ts):
+    if 0 <= task_id < len(ts):
         t = ts[task_id]
-        if role=="manager" or task_visible_to(t, username, users):
-            t["done"] = not t.get("done",False)
+        if role == "manager" or task_visible_to(t, username, users):
+            t["done"] = not t.get("done", False)
             if t["done"]:
-                t["completed_at"] = datetime.now().isoformat(timespec="minutes")
-                if t.get("recurring")=="weekly" and t.get("due_date"):
-                    try:
-                        dd = parse_date(t.get("due_date"))
-                        if dd:
-                            nxt = dd + timedelta(weeks=1)
-                            new = {**t, "done":False, "due_date":nxt.isoformat()}
-                            new.pop("completed_at",None)
-                            ts.append(new)
-                    except Exception:
-                        pass
+                now = datetime.now()
+                t["completed_at"] = iso_minutes(now)
+                t["completed_by"] = username
+                recurring = normalize_recurring(t.get("recurring"))
+                if recurring and t.get("due_date"):
+                    due_date = parse_date(t.get("due_date"))
+                    next_due = next_recurring_due_date(due_date, recurring) if due_date else None
+                    if next_due:
+                        new_task = dict(t)
+                        for key in ("completed_at", "completed_by"):
+                            new_task.pop(key, None)
+                        new_task["done"] = False
+                        new_task["overdue"] = False
+                        new_task["created_at"] = iso_minutes(now)
+                        new_task["due_date"] = next_due.isoformat()
+                        ts.append(new_task)
             else:
-                t.pop("completed_at",None)
+                t.pop("completed_at", None)
+                t.pop("completed_by", None)
     save_tasks(ts)
     flash("Task status updated.")
-    return redirect(url_for("tasks_page" if role=="manager" else "index"))
+    return redirect(url_for("tasks_page" if role == "manager" else "index"))
 
 @app.route("/remove/<int:task_id>")
 @login_required
@@ -1294,6 +1335,7 @@ def edit(task_id):
                 t["due_date"] = request.form.get("due_date","").strip()
                 t["notes"] = request.form.get("notes","").strip()
                 t["tags"] = normalize_tags(request.form.get("tags"))
+                t["recurring"] = normalize_recurring(request.form.get("recurring"))
                 save_tasks(ts)
                 flash("Task updated.")
         return redirect(url_for("tasks_page" if role=="manager" else "index"))
@@ -1553,13 +1595,23 @@ def calendar_feed():
             continue
         pr = t.get("priority", "Medium")
         color_map = {"High": "#E6492D", "Medium": "#F3B43E", "Low": "#2FA77A"}
+        recurring = normalize_recurring(t.get("recurring"))
+        title = t.get("text", "Task")
+        if recurring:
+            title = f"{title} - Repeats {recurring.title()}"
+        title = f"{title} ({pr})"
         events.append({
             "id": f"task-{i}",
-            "title": f"{t.get('text', 'Task')} ({pr})",
+            "title": title,
             "start": start,
             "allDay": True,
             "color": color_map.get(pr, "#2FA77A"),
-            "extendedProps": {"type": "task"}
+            "extendedProps": {
+                "type": "task",
+                "recurring": recurring,
+                "assigned_to": t.get("assigned_to"),
+                "due_date": t.get("due_date")
+            }
         })
 
     # shifts
