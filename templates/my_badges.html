@@ -1,0 +1,74 @@
+﻿{% extends "base.html" %}
+{% block title %}My Badges{% endblock %}
+{% block head_extra %}
+  <style>
+    .badge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .badge-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(16,24,40,.08); display:flex; align-items:center; gap:14px; }
+    .badge-icon { width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#eef2ff; font-size:28px; overflow:hidden; }
+    .badge-icon img { width:100%; height:100%; object-fit:cover; }
+    .badge-meta h2 { margin:0; font-size:1.1rem; }
+    .badge-meta p { margin:4px 0 0 0; color:#475467; font-size:0.9rem; }
+    .badge-earned-at { font-size:0.8rem; color:#667085; margin-top:6px; }
+    .badge-locked { opacity:0.5; }
+    .section-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  </style>
+{% endblock %}
+{% block content %}
+  <div class="container-xl py-4">
+    <div class="section-heading">
+      <h1 class="h3 m-0">My Badges</h1>
+      <span class="text-muted">{{ earned_badges|length }} / {{ earned_badges|length + locked_badges|length }} unlocked</span>
+    </div>
+
+    {% if earned_badges %}
+      <div class="badge-grid mb-4">
+        {% for badge in earned_badges %}
+          <div class="badge-card">
+            <div class="badge-icon">
+              {% if badge.icon_path %}
+                <img src="{{ badge.icon_path }}" alt="{{ badge.name }} icon">
+              {% else %}
+                🏅
+              {% endif %}
+            </div>
+            <div class="badge-meta">
+              <h2>{{ badge.name }}</h2>
+              {% if badge.description %}
+                <p>{{ badge.description }}</p>
+              {% endif %}
+              {% if badge.earned_at %}
+                <div class="badge-earned-at">Earned {{ badge.earned_at|format_datetime }}</div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="alert alert-info">Complete tasks to start earning badges. Your achievements will appear here.</div>
+    {% endif %}
+
+    {% if locked_badges %}
+      <h2 class="h5 mt-4">Locked Badges</h2>
+      <div class="badge-grid">
+        {% for badge in locked_badges %}
+          <div class="badge-card badge-locked">
+            <div class="badge-icon">
+              {% if badge.icon_path %}
+                <img src="{{ badge.icon_path }}" alt="{{ badge.name }} icon">
+              {% else %}
+                🎯
+              {% endif %}
+            </div>
+            <div class="badge-meta">
+              <h2>{{ badge.name }}</h2>
+              {% if badge.description %}
+                <p>{{ badge.description }}</p>
+              {% endif %}
+              <div class="badge-earned-at">Badge locked</div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

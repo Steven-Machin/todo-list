@@ -1,0 +1,7 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+  <rect x="6" y="12" width="68" height="56" rx="12" fill="#10B981" />
+  <rect x="12" y="20" width="56" height="44" rx="8" fill="#ECFDF5" />
+  <path d="M28 18v-6m24 6v-6" stroke="#047857" stroke-width="4" stroke-linecap="round" />
+  <path d="M30 42l6 6 14-14" fill="none" stroke="#047857" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="40" y="60" text-anchor="middle" font-size="12" font-family="Arial, sans-serif" fill="#047857" font-weight="600">7 DAY STREAK</text>
+</svg>

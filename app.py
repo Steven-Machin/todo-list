@@ -6,7 +6,7 @@ from flask import (
 import calendar
 import json, os, uuid, secrets, contextlib, tempfile
 from datetime import datetime, timedelta, date
-from functools import wraps
+from functools import wraps, lru_cache
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -29,6 +29,7 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     delete,
 )
@@ -81,6 +82,8 @@ GROUPS_FILE           = data_path("group_chats.json")
 GROUP_TASKS_FILE      = data_path("group_tasks.json")
 GROUP_MESSAGES_FILE   = data_path("group_messages.json")
 GROUP_SEEN_FILE       = data_path("group_seen.json")
+BADGES_FILE           = data_path("badges.json")
+USER_BADGES_FILE      = data_path("user_badges.json")
 
 REMINDERS_FILE        = data_path("reminders.json")
 PREFERENCES_FILE      = data_path("preferences.json")
@@ -128,6 +131,7 @@ if DB_ENABLED:
 
         tasks_created = relationship("TaskModel", back_populates="owner", foreign_keys="TaskModel.owner_username")
         tasks_assigned = relationship("TaskModel", back_populates="assignee", foreign_keys="TaskModel.assigned_username")
+        badge_links = relationship("UserBadgeModel", back_populates="user", cascade="all, delete-orphan")
 
     class TaskModel(Base):
         __tablename__ = "tasks"
@@ -152,6 +156,27 @@ if DB_ENABLED:
         owner = relationship("UserModel", foreign_keys=[owner_username], back_populates="tasks_created")
         completed_by = relationship("UserModel", foreign_keys=[completed_by_username])
 
+    class BadgeModel(Base):
+        __tablename__ = "badges"
+        id = Column(Integer, primary_key=True)
+        slug = Column(String(64), unique=True, nullable=False)
+        name = Column(String(120), nullable=False)
+        description = Column(Text)
+        icon_path = Column(String(255))
+
+        users = relationship("UserBadgeModel", back_populates="badge", cascade="all, delete-orphan")
+
+    class UserBadgeModel(Base):
+        __tablename__ = "user_badges"
+        __table_args__ = (UniqueConstraint("username", "badge_id", name="uq_user_badge"),)
+        id = Column(Integer, primary_key=True)
+        username = Column(String(80), ForeignKey("users.username", ondelete="CASCADE"), nullable=False)
+        badge_id = Column(Integer, ForeignKey("badges.id", ondelete="CASCADE"), nullable=False)
+        earned_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+        user = relationship("UserModel", back_populates="badge_links")
+        badge = relationship("BadgeModel", back_populates="users")
+
     Base.metadata.create_all(bind=engine)
 else:
     Base = None
@@ -164,6 +189,7 @@ NAV_ITEMS = [
     {"label": "My Chats", "endpoint": "my_chats", "roles": ["member", "manager"], "icon": None},
     {"label": "My Shifts", "endpoint": "my_shifts", "roles": ["member", "manager"], "icon": None},
     {"label": "Settings", "endpoint": "settings", "roles": ["member", "manager"], "icon": None},
+    {"label": "My Badges", "endpoint": "my_badges", "roles": ["member", "manager"], "icon": None},
 
     {"label": "Task Manager", "endpoint": "task_manager", "roles": ["manager"], "icon": None},
     {"label": "Team Member Manager", "endpoint": "team_manager", "roles": ["manager"], "icon": None},
@@ -171,6 +197,33 @@ NAV_ITEMS = [
     {"label": "Title Manager", "endpoint": "title_manager", "roles": ["manager"], "icon": None},
     {"label": "Shifts", "endpoint": "shifts", "roles": ["manager"], "icon": None},
 ]
+
+BADGE_SLUG_FIRST_STEP = "first_step"
+BADGE_SLUG_TASK_MASTER = "task_master"
+BADGE_SLUG_WEEKLY_WARRIOR = "weekly_warrior"
+
+DEFAULT_BADGES = [
+    {
+        "slug": BADGE_SLUG_FIRST_STEP,
+        "name": "First Step",
+        "description": "Complete your first task.",
+        "icon_path": "/static/badges/first_step.svg",
+    },
+    {
+        "slug": BADGE_SLUG_TASK_MASTER,
+        "name": "Task Master",
+        "description": "Complete 100 tasks.",
+        "icon_path": "/static/badges/task_master.svg",
+    },
+    {
+        "slug": BADGE_SLUG_WEEKLY_WARRIOR,
+        "name": "Weekly Warrior",
+        "description": "Complete tasks every day for seven days in a row.",
+        "icon_path": "/static/badges/weekly_warrior.svg",
+    },
+]
+
+DEFAULT_BADGES_BY_SLUG = {badge["slug"]: badge for badge in DEFAULT_BADGES}
 
 
 
@@ -391,6 +444,227 @@ def apply_task_defaults(task: Dict[str, Any]) -> Dict[str, Any]:
     task["tags"] = normalize_tags(task.get("tags"))
     task["recurring"] = normalize_recurring(task.get("recurring"))
     return task
+
+
+
+# ------------------------------- Badge persistence -------------------------------
+
+
+def load_badges_json() -> List[Dict[str, Any]]:
+    data = load_json(BADGES_FILE, [dict(item) for item in DEFAULT_BADGES])
+    return [dict(item) for item in data]
+
+
+def save_badges_json(data: List[Dict[str, Any]]) -> None:
+    save_json(BADGES_FILE, data)
+
+
+def load_user_badges_json() -> List[Dict[str, Any]]:
+    return load_json(USER_BADGES_FILE, [])
+
+
+def save_user_badges_json(data: List[Dict[str, Any]]) -> None:
+    save_json(USER_BADGES_FILE, data)
+
+
+def _badge_to_dict(payload: Any) -> Dict[str, Any]:
+    if isinstance(payload, dict):
+        result = dict(payload)
+        result.setdefault("icon_path", result.get("icon_path") or "")
+        return result
+    return {
+        "id": getattr(payload, "id", None),
+        "slug": getattr(payload, "slug", None),
+        "name": getattr(payload, "name", None),
+        "description": getattr(payload, "description", None),
+        "icon_path": getattr(payload, "icon_path", "") or "",
+    }
+
+
+@lru_cache(maxsize=1)
+def bootstrap_badges() -> bool:
+    ensure_default_badges()
+    return True
+
+
+def ensure_default_badges() -> None:
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal.begin() as session:
+            existing = {slug for (slug,) in session.query(BadgeModel.slug).all()}
+            for badge in DEFAULT_BADGES:
+                if badge["slug"] not in existing:
+                    session.add(BadgeModel(
+                        slug=badge["slug"],
+                        name=badge["name"],
+                        description=badge["description"],
+                        icon_path=badge.get("icon_path"),
+                    ))
+    else:
+        badges = load_badges_json()
+        existing = {_norm(item.get("slug")) for item in badges}
+        updated = False
+        for badge in DEFAULT_BADGES:
+            if _norm(badge["slug"]) not in existing:
+                badges.append(dict(badge))
+                updated = True
+        if updated:
+            save_badges_json(badges)
+
+
+def get_all_badges() -> List[Dict[str, Any]]:
+    bootstrap_badges()
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal() as session:
+            rows = session.query(BadgeModel).order_by(BadgeModel.id).all()
+            return [_badge_to_dict(row) for row in rows]
+    return [dict(item) for item in load_badges_json()]
+
+
+def get_badge_catalog() -> Dict[str, Dict[str, Any]]:
+    return {badge["slug"]: badge for badge in get_all_badges()}
+
+
+def get_user_badges(username: str) -> List[Dict[str, Any]]:
+    bootstrap_badges()
+    uname = _norm(username)
+    if not uname:
+        return []
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal() as session:
+            rows = (
+                session.query(UserBadgeModel, BadgeModel)
+                .join(BadgeModel, UserBadgeModel.badge_id == BadgeModel.id)
+                .filter(UserBadgeModel.username == uname)
+                .order_by(UserBadgeModel.earned_at)
+                .all()
+            )
+            results: List[Dict[str, Any]] = []
+            for link, badge in rows:
+                badge_dict = _badge_to_dict(badge)
+                earned_at = iso_minutes(link.earned_at) if getattr(link, "earned_at", None) else None
+                badge_dict["earned_at"] = earned_at
+                results.append(badge_dict)
+            return results
+    badge_catalog = get_badge_catalog()
+    records = load_user_badges_json()
+    results = []
+    for entry in records:
+        if _norm(entry.get("username")) != uname:
+            continue
+        badge = badge_catalog.get(entry.get("badge_slug"))
+        if not badge:
+            continue
+        badge_dict = dict(badge)
+        badge_dict["earned_at"] = entry.get("earned_at")
+        results.append(badge_dict)
+    results.sort(key=lambda item: item.get("earned_at") or "")
+    return results
+
+
+def user_has_badge(username: str, badge_slug: str) -> bool:
+    return any(badge_slug == badge.get("slug") for badge in get_user_badges(username))
+
+
+def store_user_badge(username: str, badge_slug: str) -> Optional[Dict[str, Any]]:
+    bootstrap_badges()
+    uname = _norm(username)
+    if not uname:
+        return None
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal.begin() as session:
+            badge = session.query(BadgeModel).filter(BadgeModel.slug == badge_slug).one_or_none()
+            if not badge:
+                return None
+            existing = (
+                session.query(UserBadgeModel)
+                .filter(UserBadgeModel.username == uname, UserBadgeModel.badge_id == badge.id)
+                .one_or_none()
+            )
+            if existing is not None:
+                return None
+            link = UserBadgeModel(username=uname, badge_id=badge.id, earned_at=datetime.utcnow())
+            session.add(link)
+            session.flush()
+            badge_dict = _badge_to_dict(badge)
+            badge_dict["earned_at"] = iso_minutes(link.earned_at) if link.earned_at else None
+            return badge_dict
+    badge_catalog = get_badge_catalog()
+    badge = badge_catalog.get(badge_slug)
+    if not badge:
+        return None
+    records = load_user_badges_json()
+    for entry in records:
+        if _norm(entry.get("username")) == uname and entry.get("badge_slug") == badge_slug:
+            return None
+    earned_at = iso_minutes(datetime.utcnow())
+    records.append({
+        "username": uname,
+        "badge_slug": badge_slug,
+        "earned_at": earned_at,
+    })
+    save_user_badges_json(records)
+    badge_dict = dict(badge)
+    badge_dict["earned_at"] = earned_at
+    return badge_dict
+
+
+def award_badges_for_user(username: str, tasks: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    bootstrap_badges()
+    uname = _norm(username)
+    if not uname:
+        return []
+    if tasks is None:
+        tasks = load_tasks()
+    completed_tasks = []
+    for task in tasks:
+        if not isinstance(task, dict) or not task.get("done"):
+            continue
+        completed_by = _norm(task.get("completed_by"))
+        if not completed_by and task.get("assigned_username"):
+            completed_by = _norm(task.get("assigned_username"))
+        if completed_by != uname:
+            continue
+        completed_tasks.append(task)
+
+    completed_count = len(completed_tasks)
+    completion_dates = []
+    for task in completed_tasks:
+        stamp = task.get("completed_at")
+        dt = parse_dt_any(stamp) if stamp else None
+        if dt:
+            completion_dates.append(dt.date())
+    unique_dates = sorted(set(completion_dates))
+
+    def has_streak(dates: List[date], length: int) -> bool:
+        if len(dates) < length:
+            return False
+        streak = 1
+        for idx in range(1, len(dates)):
+            if (dates[idx] - dates[idx - 1]).days == 1:
+                streak += 1
+                if streak >= length:
+                    return True
+            else:
+                streak = 1
+        return False
+
+    earned_slugs = {badge.get("slug") for badge in get_user_badges(uname)}
+    targets: List[str] = []
+    if BADGE_SLUG_FIRST_STEP not in earned_slugs and completed_count >= 1:
+        targets.append(BADGE_SLUG_FIRST_STEP)
+    if BADGE_SLUG_TASK_MASTER not in earned_slugs and completed_count >= 100:
+        targets.append(BADGE_SLUG_TASK_MASTER)
+    if BADGE_SLUG_WEEKLY_WARRIOR not in earned_slugs and has_streak(unique_dates, 7):
+        targets.append(BADGE_SLUG_WEEKLY_WARRIOR)
+
+    newly_awarded = []
+    for slug in targets:
+        badge_dict = store_user_badge(uname, slug)
+        if badge_dict:
+            newly_awarded.append(badge_dict)
+    return newly_awarded
+
+
 
 
 def csrf_token():
@@ -1258,6 +1532,7 @@ def toggle(task_id):
     role = current_role()
     users = load_users()
     ts = load_tasks()
+    newly_awarded: List[Dict[str, Any]] = []
     if 0 <= task_id < len(ts):
         t = ts[task_id]
         if role == "manager" or task_visible_to(t, username, users):
@@ -1279,10 +1554,17 @@ def toggle(task_id):
                         new_task["created_at"] = iso_minutes(now)
                         new_task["due_date"] = next_due.isoformat()
                         ts.append(new_task)
+                newly_awarded = award_badges_for_user(username, ts)
             else:
                 t.pop("completed_at", None)
                 t.pop("completed_by", None)
     save_tasks(ts)
+    for badge in newly_awarded:
+        description = badge.get("description") or ""
+        if description:
+            flash(f"Badge unlocked: {badge.get('name')} - {description}")
+        else:
+            flash(f"Badge unlocked: {badge.get('name')}")
     flash("Task status updated.")
     return redirect(url_for("tasks_page" if role == "manager" else "index"))
 
@@ -1717,6 +1999,19 @@ def settings_update():
 
     flash("Settings saved.")
     return redirect(url_for("settings"))
+
+# ------------------------------- Badges -------------------------------
+@app.route("/badges", endpoint="my_badges")
+@login_required
+def my_badges():
+    username = require_username()
+    earned = get_user_badges(username)
+    catalog = get_badge_catalog()
+    earned_slugs = {badge.get("slug") for badge in earned}
+    locked = [badge for slug, badge in catalog.items() if slug not in earned_slugs]
+    locked.sort(key=lambda badge: badge.get("name") or "")
+    return render_template("my_badges.html", earned_badges=earned, locked_badges=locked)
+
 
 # ------------------------------- Overdue -------------------------------
 @app.route("/overdue", endpoint="overdue")
