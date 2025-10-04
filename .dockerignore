@@ -1,0 +1,15 @@
+﻿.venv/
+__pycache__/
+*.pyc
+.git
+.gitignore
+.env
+.vscode/
+.DS_Store
+tasks.json
+users.json
+shifts.json
+reminders.json
+preferences.json
+password_resets.json
+*.lock
