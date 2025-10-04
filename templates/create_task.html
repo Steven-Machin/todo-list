@@ -1,42 +1,66 @@
 {% extends "base.html" %}
 {% block title %}Create New Task{% endblock %}
 {% block content %}
-  <div class="container">
-    <h1>Create New Task</h1>
+<div class="container-xl py-4">
+  <div class="card shadow-sm border-0">
+    <div class="card-body">
+      <h1 class="h4 mb-4">Create New Task</h1>
+      <form class="row g-3" action="{{ url_for('add') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <form class="add-form" action="{{ url_for('add') }}" method="post">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="text" name="task" placeholder="Task description" required>
+        <div class="col-12">
+          <label class="form-label" for="task">Task description</label>
+          <input class="form-control" id="task" type="text" name="task" placeholder="What needs to be done?" required>
+        </div>
 
-      <select name="priority">
-        <option value="Low">Low</option>
-        <option value="Medium" selected>Medium</option>
-        <option value="High">High</option>
-      </select>
+        <div class="col-md-4">
+          <label class="form-label" for="priority">Priority</label>
+          <select class="form-select" id="priority" name="priority">
+            <option value="Low">Low</option>
+            <option value="Medium" selected>Medium</option>
+            <option value="High">High</option>
+          </select>
+        </div>
 
-      <select name="assigned_to">
-        <option value="">-- Unassigned --</option>
-        {% for u in assignable_users %}
-          <option value="{{ u.username }}">{{ u.display_name }}</option>
-        {% endfor %}
-      </select>
+        <div class="col-md-4">
+          <label class="form-label" for="assigned_to">Assign to</label>
+          <select class="form-select" id="assigned_to" name="assigned_to">
+            <option value="">-- Unassigned --</option>
+            {% for user in assignable_users %}
+              <option value="{{ user.username }}">{{ user.display_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-      <input type="date" name="due_date">
-      <input type="time" name="due_time" placeholder="Optional time">
+        <div class="col-md-4">
+          <label class="form-label" for="due_date">Due date</label>
+          <input class="form-control" id="due_date" type="date" name="due_date">
+        </div>
 
-      <div class="recurring">
-        <label>
-          <input type="checkbox" name="recurring" value="weekly">
-          Repeat weekly
-        </label>
-      </div>
+        <div class="col-12">
+          <label class="form-label" for="tags">Tags</label>
+          <input class="form-control" id="tags" type="text" name="tags" placeholder="Example: payroll, q2, vip">
+          <div class="form-text">Separate tags with commas.{% if all_tags %} Existing tags: {{ all_tags|join(', ') }}.{% endif %}</div>
+        </div>
 
-      <textarea name="notes" placeholder="Optional notes"></textarea>
-      <button type="submit">Add Task</button>
-    </form>
+        <div class="col-12">
+          <div class="form-check">
+            <input class="form-check-input" id="recurring" type="checkbox" name="recurring" value="weekly">
+            <label class="form-check-label" for="recurring">Repeat weekly</label>
+          </div>
+        </div>
 
-    <p style="text-align:center; margin-top:1em;">
-      <a href="{{ url_for('tasks_page') }}">&larr; Back to Task Manager</a>
-    </p>
+        <div class="col-12">
+          <label class="form-label" for="notes">Notes</label>
+          <textarea class="form-control" id="notes" name="notes" rows="4" placeholder="Optional notes or context"></textarea>
+        </div>
+
+        <div class="col-12 d-flex justify-content-end gap-2">
+          <a class="btn btn-outline-secondary" href="{{ url_for('tasks_page') }}">Cancel</a>
+          <button class="btn btn-primary" type="submit">Add Task</button>
+        </div>
+      </form>
+    </div>
   </div>
+</div>
 {% endblock %}

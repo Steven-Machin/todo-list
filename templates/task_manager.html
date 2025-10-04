@@ -1,62 +1,161 @@
 {% extends "base.html" %}
 {% block title %}Task Manager{% endblock %}
 {% block content %}
-  <div class="container">
-    <h1>Task Manager</h1>
-
-    {% if role == 'manager' %}
-      <div style="margin-bottom: 16px;">
-        <a href="{{ url_for('create_task_page') }}" style="font-weight:500; color:#007acc; text-decoration:none;">+ Create New Task</a>
-      </div>
-
-      <form class="filter-form" method="get" action="{{ url_for('tasks_page') }}">
-        <label for="sort" style="margin-right:8px;">Sort:</label>
-        <select name="sort" id="sort">
-          <option value="due"           {% if sort_by=='due'           %}selected{% endif %}>Due Date (Soon -> Far)</option>
-          <option value="due_rev"       {% if sort_by=='due_rev'       %}selected{% endif %}>Due Date (Far -> Soon)</option>
-          <option value="priority"      {% if sort_by=='priority'      %}selected{% endif %}>Priority (High -> Low)</option>
-          <option value="priority_rev"  {% if sort_by=='priority_rev'  %}selected{% endif %}>Priority (Low -> High)</option>
-          <option value="status"        {% if sort_by=='status'        %}selected{% endif %}>Completed Only</option>
-        </select>
-        <button type="submit">Apply</button>
-      </form>
-
-      <ul class="task-list">
-        {% for task in tasks %}
-          <li class="task-item {% if task.overdue %}overdue{% endif %}">
-            <div class="task-header">
-              <form method="post" action="{{ url_for('toggle', task_id=loop.index0) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="checkbox" onchange="this.form.submit()" {% if task.done %}checked{% endif %}>
-              </form>
-              <span class="task-text {% if task.done %}done{% endif %}">{{ loop.index }}. {{ task.text }}</span>
-            </div>
-            <div class="task-meta">
-              <span class="priority {{ task.priority|lower }}">Priority: {{ task.priority }}</span>
-              <span class="assigned">Assigned to: {{ task.assigned_to }}</span>
-              {% if task.due %}
-                <span class="due">Due: {{ task.due }}</span>
-              {% endif %}
-              {% if task.completed_at %}
-                <span class="completed">Completed at: {{ task.completed_at|format_datetime }}</span>
-              {% endif %}
-            </div>
-
-            {% if task.notes %}
-              <div class="task-notes">
-                <strong>Notes:</strong> {{ task.notes }}
-              </div>
-            {% endif %}
-
-            <div class="task-actions">
-              <a href="{{ url_for('edit', task_id=loop.index0) }}">Edit</a>
-              <a href="{{ url_for('remove', task_id=loop.index0) }}">Remove</a>
-            </div>
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p>You do not have access to this page.</p>
-    {% endif %}
+<div class="container-xl py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Task Manager</h1>
+      <p class="text-muted small mb-0">{{ visible_tasks }} of {{ total_tasks }} tasks shown</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('create_task_page') }}">Create Task</a>
   </div>
+
+  <form class="card shadow-sm border-0 mb-4" method="get">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label" for="sort">Sort By</label>
+          <select class="form-select" id="sort" name="sort">
+            <option value="due_asc" {% if sort_by == 'due_asc' %}selected{% endif %}>Due date (soonest first)</option>
+            <option value="due_desc" {% if sort_by == 'due_desc' %}selected{% endif %}>Due date (latest first)</option>
+            <option value="priority_hl" {% if sort_by == 'priority_hl' %}selected{% endif %}>Priority (High to Low)</option>
+            <option value="priority_lh" {% if sort_by == 'priority_lh' %}selected{% endif %}>Priority (Low to High)</option>
+            <option value="created_desc" {% if sort_by == 'created_desc' %}selected{% endif %}>Recently created</option>
+            <option value="completed" {% if sort_by == 'completed' %}selected{% endif %}>Recently completed</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <span class="form-label d-block">Priority</span>
+          <div class="d-flex flex-wrap gap-3">
+            {% for label in ['High', 'Medium', 'Low'] %}
+              {% set lower = label|lower %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="priority" value="{{ lower }}" id="priority-{{ lower }}" {% if label in selected_priorities %}checked{% endif %}>
+                <label class="form-check-label" for="priority-{{ lower }}">{{ label }}</label>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label" for="tags">Tags</label>
+          <select class="form-select" id="tags" name="tags" multiple size="4">
+            {% for tag in all_tags %}
+              <option value="{{ tag }}" {% if tag|lower in selected_tag_slugs %}selected{% endif %}>{{ tag }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Hold Ctrl (or Command) to select multiple tags.</div>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label" for="due_bucket">Due Date</label>
+          <select class="form-select" id="due_bucket" name="due_bucket">
+            <option value="" {% if not due_bucket %}selected{% endif %}>All dates</option>
+            <option value="overdue" {% if due_bucket == 'overdue' %}selected{% endif %}>Overdue</option>
+            <option value="today" {% if due_bucket == 'today' %}selected{% endif %}>Due today</option>
+            <option value="week" {% if due_bucket == 'week' %}selected{% endif %}>Due in next 7 days</option>
+            <option value="upcoming" {% if due_bucket == 'upcoming' %}selected{% endif %}>Upcoming</option>
+            <option value="none" {% if due_bucket == 'none' %}selected{% endif %}>No due date</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label" for="due_from">Due from</label>
+          <input class="form-control" type="date" id="due_from" name="due_from" value="{{ due_from }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="due_to">Due to</label>
+          <input class="form-control" type="date" id="due_to" name="due_to" value="{{ due_to }}">
+        </div>
+
+        <div class="col-12 d-flex justify-content-end gap-2">
+          <a class="btn btn-outline-secondary" href="{{ url_for('tasks_page') }}">Reset</a>
+          <button class="btn btn-primary" type="submit">Apply filters</button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {% if selected_priorities or tag_filters or due_bucket or due_from or due_to %}
+    <div class="mb-3 small">
+      <span class="text-muted me-2">Active filters:</span>
+      {% for label in selected_priorities %}
+        <span class="badge rounded-pill text-bg-light border border-secondary-subtle text-secondary">Priority: {{ label }}</span>
+      {% endfor %}
+      {% for tag in tag_filters %}
+        <span class="badge rounded-pill text-bg-light border border-secondary-subtle text-secondary">Tag: {{ tag }}</span>
+      {% endfor %}
+      {% if due_bucket %}
+        <span class="badge rounded-pill text-bg-light border border-secondary-subtle text-secondary">Due: {{ due_bucket|capitalize }}</span>
+      {% endif %}
+      {% if due_from %}
+        <span class="badge rounded-pill text-bg-light border border-secondary-subtle text-secondary">From: {{ due_from }}</span>
+      {% endif %}
+      {% if due_to %}
+        <span class="badge rounded-pill text-bg-light border border-secondary-subtle text-secondary">To: {{ due_to }}</span>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if tasks %}
+    <div class="vstack gap-3">
+      {% for task in tasks %}
+        {% set priority_color = {'High': 'danger', 'Medium': 'warning', 'Low': 'secondary'}.get(task.priority, 'secondary') %}
+        {% set due_value = task.due_date or task.due %}
+        <div class="card shadow-sm border-0" style="border-left: 4px solid var(--bs-{{ priority_color }});">
+          <div class="card-body">
+            <div class="d-flex align-items-start gap-3">
+              <form method="post" action="{{ url_for('toggle', task_id=loop.index0) }}" class="mt-1">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input class="form-check-input" type="checkbox" onchange="this.form.submit()" {% if task.done %}checked{% endif %}>
+              </form>
+              <div class="flex-grow-1">
+                <div class="d-flex flex-wrap justify-content-between gap-3">
+                  <div>
+                    <h2 class="h5 mb-1 {% if task.done %}text-muted text-decoration-line-through{% endif %}">{{ task.text }}</h2>
+                    <div class="d-flex flex-wrap gap-3 text-muted small">
+                      <span>Priority <span class="badge text-bg-{{ priority_color }}">{{ task.priority or 'Medium' }}</span></span>
+                      <span>Assigned to {{ task.assigned_to or 'Unassigned' }}</span>
+                      {% if due_value %}
+                        <span>Due {{ due_value }}</span>
+                      {% endif %}
+                      {% if task.completed_at %}
+                        <span>Completed {{ task.completed_at|format_datetime }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="d-flex flex-column align-items-end gap-2">
+                    <div class="btn-group">
+                      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('edit', task_id=loop.index0) }}">Edit</a>
+                      <a class="btn btn-sm btn-outline-danger" href="{{ url_for('remove', task_id=loop.index0) }}" onclick="return confirm('Remove this task?');">Remove</a>
+                    </div>
+                  </div>
+                </div>
+
+                {% if task.notes %}
+                  <div class="alert alert-info mt-3 mb-0 small">{{ task.notes }}</div>
+                {% endif %}
+
+                {% if task.tags %}
+                  <div class="d-flex flex-wrap gap-2 mt-3">
+                    {% for tag in task.tags %}
+                      <span class="badge rounded-pill text-bg-light border border-secondary-subtle text-secondary">{{ tag }}</span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="text-center py-5 bg-white rounded shadow-sm">
+      <h2 class="h5 mb-2">No tasks match your filters yet.</h2>
+      <p class="text-muted mb-4">Adjust filters or create a new task to get started.</p>
+      <a class="btn btn-outline-primary" href="{{ url_for('create_task_page') }}">Create your first task</a>
+    </div>
+  {% endif %}
+</div>
 {% endblock %}

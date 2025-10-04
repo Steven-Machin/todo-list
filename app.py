@@ -332,6 +332,32 @@ def inject_user_ctx():
 def _norm(s):
     return (s or "").strip().lower()
 
+def normalize_tags(value: Any) -> list[str]:
+    """Return a cleaned list of tag strings from form or stored data."""
+    if not value:
+        return []
+    if isinstance(value, list):
+        cleaned: list[str] = []
+        for item in value:
+            if not item:
+                continue
+            token = str(item).strip()
+            if token:
+                cleaned.append(token)
+        return cleaned
+    if isinstance(value, str):
+        raw = value.replace(';', ",")
+        return [token.strip() for token in raw.split(",") if token.strip()]
+    token = str(value).strip()
+    return [token] if token else []
+
+
+def apply_task_defaults(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure optional fields exist on task dictionaries."""
+    task.setdefault("tags", [])
+    task["tags"] = normalize_tags(task.get("tags"))
+    return task
+
 
 def csrf_token():
     return session.get("_csrf", "")
@@ -516,7 +542,8 @@ def _task_to_dict(model: "TaskModel") -> Dict[str, Any]:
 
 def load_tasks() -> List[Dict[str, Any]]:
     if not DB_ENABLED or SessionLocal is None:
-        return load_json(TASKS_FILE, [])
+        records = load_json(TASKS_FILE, [])
+        return [apply_task_defaults(dict(task)) for task in records]
     with SessionLocal() as session:
         rows = (
             session.query(TaskModel)
@@ -524,26 +551,33 @@ def load_tasks() -> List[Dict[str, Any]]:
             .all()
         )
         if not rows:
-            return load_json(TASKS_FILE, [])
-        return [_task_to_dict(row) for row in rows]
+            records = load_json(TASKS_FILE, [])
+            return [apply_task_defaults(dict(task)) for task in records]
+        return [apply_task_defaults(_task_to_dict(row)) for row in rows]
 
 
 def save_tasks(tasks: List[Dict[str, Any]]):
+    tasks = tasks or []
+    normalized: List[Dict[str, Any]] = []
+    for record in tasks:
+        if not isinstance(record, dict):
+            continue
+        item = dict(record)
+        item["tags"] = normalize_tags(item.get("tags"))
+        normalized.append(item)
+
     if not DB_ENABLED or SessionLocal is None:
-        save_json(TASKS_FILE, tasks)
+        save_json(TASKS_FILE, normalized)
         return
 
-    tasks = tasks or []
     with SessionLocal.begin() as session:
         session.execute(delete(TaskModel))
         session.flush()
         valid_usernames = {row.username for row in session.query(UserModel).all()}
-        for idx, record in enumerate(tasks):
-            if not isinstance(record, dict):
-                continue
-            assigned_username = _optional_username(record.get("assigned_username"))
-            owner_username = _optional_username(record.get("owner") or record.get("created_by"))
-            completed_by_username = _optional_username(record.get("completed_by"))
+        for idx, item in enumerate(normalized):
+            assigned_username = _optional_username(item.get("assigned_username"))
+            owner_username = _optional_username(item.get("owner") or item.get("created_by"))
+            completed_by_username = _optional_username(item.get("completed_by"))
 
             if assigned_username and assigned_username not in valid_usernames:
                 assigned_username = None
@@ -552,20 +586,23 @@ def save_tasks(tasks: List[Dict[str, Any]]):
             if completed_by_username and completed_by_username not in valid_usernames:
                 completed_by_username = None
 
-            due_date = parse_date(record.get("due_date")) if record.get("due_date") else None
-            created_at = parse_dt_any(record.get("created_at")) or datetime.utcnow()
-            completed_at = parse_dt_any(record.get("completed_at")) if record.get("completed_at") else None
+            due_date = parse_date(item.get("due_date")) if item.get("due_date") else None
+            created_at = parse_dt_any(item.get("created_at")) or datetime.utcnow()
+            completed_at = parse_dt_any(item.get("completed_at")) if item.get("completed_at") else None
 
-            priority = record.get("priority") or "Medium"
-            recurring = record.get("recurring") or None
-            notes = record.get("notes") or None
-            assigned_display = record.get("assigned_to") or None
-            overdue = bool(record.get("overdue", False))
-            extra = {k: v for k, v in record.items() if k not in TASK_PERSISTED_KEYS}
+            priority = item.get("priority") or "Medium"
+            recurring = item.get("recurring") or None
+            notes = item.get("notes") or None
+            assigned_display = item.get("assigned_to") or None
+            overdue = bool(item.get("overdue", False))
+            extra = {k: v for k, v in item.items() if k not in TASK_PERSISTED_KEYS}
+
+            if item.get("tags") is not None:
+                extra["tags"] = item.get("tags") or []
 
             task = TaskModel(
-                text=record.get("text") or "",
-                done=bool(record.get("done", False)),
+                text=item.get("text") or "",
+                done=bool(item.get("done", False)),
                 priority=priority,
                 notes=notes,
                 due_date=due_date,
@@ -581,7 +618,6 @@ def save_tasks(tasks: List[Dict[str, Any]]):
                 extra=extra or None,
             )
             session.add(task)
-
 
 def load_users() -> List[Dict[str, Any]]:
     if not DB_ENABLED or SessionLocal is None:
@@ -1144,6 +1180,7 @@ def add():
     due_date = request.form.get("due_date","").strip()
     recurring = "weekly" if request.form.get("recurring")=="weekly" else None
     notes = request.form.get("notes","").strip()
+    tags = normalize_tags(request.form.get("tags"))
     created_by = require_username()
 
     users = load_users()
@@ -1167,6 +1204,7 @@ def add():
         "due_date": due_date,
         "recurring": recurring,
         "notes": notes,
+        "tags": tags,
         "owner": created_by,
         "created_by": created_by,
         "created_at": datetime.now().isoformat(timespec="minutes")
@@ -1255,6 +1293,7 @@ def edit(task_id):
                         t["assigned_username"] = None
                 t["due_date"] = request.form.get("due_date","").strip()
                 t["notes"] = request.form.get("notes","").strip()
+                t["tags"] = normalize_tags(request.form.get("tags"))
                 save_tasks(ts)
                 flash("Task updated.")
         return redirect(url_for("tasks_page" if role=="manager" else "index"))
@@ -1262,43 +1301,116 @@ def edit(task_id):
         if 0<=task_id<len(ts):
             t = ts[task_id]
             if role=="manager" or task_visible_to(t, username, users):
-                assignable = [u["username"] for u in users if u.get("role")!="manager"]
-                return render_template("edit.html", task=t, task_id=task_id, assignable_users=assignable)
+                assignable = [
+                    {"username": u["username"], "display_name": u.get("display_name") or u["username"].title()}
+                    for u in users
+                    if u.get("role")!="manager"
+                ]
+                return render_template("edit.html", task=t, task_id=task_id, assignable_users=assignable, role=role)
     return redirect(url_for("tasks_page" if role=="manager" else "index"))
 
 @app.route("/tasks", endpoint="task_manager")
 @manager_required
 def tasks_page():
-    # Managers only view (sidebar for managers shows this link)
-    sort_by  = request.args.get("sort","due_asc")
-    ts = load_tasks()
+    sort_by = request.args.get("sort", "due_asc")
+    all_tasks = load_tasks()
 
-    if sort_by=="completed":
-        ts = [t for t in ts if t.get("done")]
+    priority_lookup = {"high": "High", "medium": "Medium", "low": "Low"}
+    selected_priorities: List[str] = []
+    for value in request.args.getlist("priority"):
+        key = value.strip().lower()
+        if key in priority_lookup:
+            selected_priorities.append(priority_lookup[key])
 
-    def keyfn(t):
-        dd = t.get("due") or t.get("due_date")
-        pd_val = {"High":0,"Medium":1,"Low":2}.get(t.get("priority","Medium"), 1)
-        mapping = {
-            "due_asc":     parse_date_any(dd, default_far=True),
-            "due_desc":   -parse_date_any(dd, default_far=True).timestamp(),
-            "priority_hl": pd_val,
-            "priority_lh": -pd_val,
-            "completed":   parse_date_any(t.get("completed_at"), default_far=True)
-        }
-        return mapping[sort_by]
-    ts.sort(key=keyfn)
+    tag_filters_raw = [tag.strip() for tag in request.args.getlist("tags") if tag.strip()]
+    selected_tag_slugs = [tag.lower() for tag in tag_filters_raw]
+
+    due_bucket = (request.args.get("due_bucket") or "").lower()
+    due_from_raw = request.args.get("due_from", "").strip()
+    due_to_raw = request.args.get("due_to", "").strip()
+    due_from = parse_date(due_from_raw) if due_from_raw else None
+    due_to = parse_date(due_to_raw) if due_to_raw else None
+
+    today_val = date.today()
+
+    filtered: List[Dict[str, Any]] = []
+    for task in all_tasks:
+        tags_lower = [tag.lower() for tag in task.get("tags", [])]
+        due_ref = task.get("due_date") or task.get("due")
+        due_dt = parse_date(due_ref) if due_ref else None
+
+        if selected_priorities and task.get("priority") not in selected_priorities:
+            continue
+        if selected_tag_slugs and not any(tag in tags_lower for tag in selected_tag_slugs):
+            continue
+
+        if due_bucket == "overdue":
+            if not (due_dt and due_dt < today_val and not task.get("done")):
+                continue
+        elif due_bucket == "today":
+            if not (due_dt and due_dt == today_val):
+                continue
+        elif due_bucket == "upcoming":
+            if not (due_dt and due_dt > today_val):
+                continue
+        elif due_bucket == "week":
+            if not (due_dt and 0 <= (due_dt - today_val).days <= 7):
+                continue
+        elif due_bucket == "none":
+            if due_dt is not None:
+                continue
+
+        if due_from and (due_dt is None or due_dt < due_from):
+            continue
+        if due_to and (due_dt is None or due_dt > due_to):
+            continue
+
+        filtered.append(task)
+
+    valid_sorts = {"due_asc", "due_desc", "priority_hl", "priority_lh", "completed", "created_desc"}
+    if sort_by not in valid_sorts:
+        sort_by = "due_asc"
+
+    priority_rank = {"High": 0, "Medium": 1, "Low": 2}
+
+    if sort_by == "completed":
+        filtered = [task for task in filtered if task.get("done")]
+        filtered.sort(key=lambda t: parse_dt_any(t.get("completed_at")) or datetime.min, reverse=True)
+    elif sort_by == "priority_hl":
+        filtered.sort(key=lambda t: priority_rank.get(t.get("priority"), len(priority_rank)))
+    elif sort_by == "priority_lh":
+        filtered.sort(key=lambda t: priority_rank.get(t.get("priority"), len(priority_rank)), reverse=True)
+    elif sort_by == "due_desc":
+        filtered.sort(key=lambda t: parse_date_any(t.get("due") or t.get("due_date"), default_far=True), reverse=True)
+    elif sort_by == "created_desc":
+        filtered.sort(key=lambda t: parse_dt_any(t.get("created_at")) or datetime.min, reverse=True)
+    else:
+        filtered.sort(key=lambda t: parse_date_any(t.get("due") or t.get("due_date"), default_far=True))
 
     users = load_users()
-    elig = {"assistant manager","family swim supervisor","lead supervisor","swim administrator","programming supervisor","supervisor"}
-    assignable = [u["username"] for u in users if u["role"]!="manager" and any(t.lower() in elig for t in u.get("titles",[]))]
+    elig = {"assistant manager", "family swim supervisor", "lead supervisor", "swim administrator", "programming supervisor", "supervisor"}
+    assignable = [
+        {"username": u["username"], "display_name": u.get("display_name") or u["username"].title()}
+        for u in users
+        if u["role"] != "manager" and any(t.lower() in elig for t in u.get("titles", []))
+    ]
+
+    all_tags = sorted({tag for task in all_tasks for tag in normalize_tags(task.get("tags"))})
 
     return render_template("task_manager.html",
-                           tasks=ts,
+                           tasks=filtered,
                            role="manager",
                            sort_by=sort_by,
-                           assignable_users=assignable)
-
+                           assignable_users=assignable,
+                           selected_priorities=selected_priorities,
+                           tag_filters=tag_filters_raw,
+                           selected_tag_slugs=selected_tag_slugs,
+                           due_bucket=due_bucket,
+                           due_from=due_from_raw,
+                           due_to=due_to_raw,
+                           all_tags=all_tags,
+                           total_tasks=len(all_tasks),
+                           visible_tasks=len(filtered))
 @app.route("/tasks/create", methods=["GET","POST"])
 @manager_required
 @demo_guard
@@ -1307,8 +1419,12 @@ def create_task_page():
         return redirect(url_for("add"))
     users = load_users()
     elig = {"assistant manager","family swim supervisor","lead supervisor","swim administrator","programming supervisor","supervisor"}
-    assignable = [u["username"] for u in users if u["role"]!="manager" and any(t.lower() in elig for t in u.get("titles",[]))]
-    return render_template("create_task.html", assignable_users=assignable)
+    assignable = [
+        {"username": u["username"], "display_name": u.get("display_name") or u["username"].title()}
+        for u in users
+        if u["role"]!="manager" and any(t.lower() in elig for t in u.get("titles",[]))
+    ]
+    return render_template("create_task.html", assignable_users=assignable, all_tags=sorted({tag for task in load_tasks() for tag in normalize_tags(task.get("tags"))}))
 
 # ------------------------------- Shifts -------------------------------
 @app.route("/shifts", endpoint="shifts")
