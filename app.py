@@ -393,16 +393,33 @@ def inject_flags():
     return {"DEMO": DEMO, "APP_MODE": APP_MODE}
 
 
+def resolve_theme_preference(username: str | None) -> str:
+    theme = session.get("theme")
+    if theme in {"light", "dark"}:
+        return theme
+    if username:
+        prefs_all = load_prefs()
+        if isinstance(prefs_all, dict):
+            record = prefs_all.get(username, {}) or {}
+            theme = record.get("theme")
+            if theme in {"light", "dark"}:
+                session["theme"] = theme
+                return theme
+    return "light"
+
+
 @app.context_processor
 def inject_user_ctx():
     role = current_role()
     username = current_username()
     display = getattr(current_user, "display_name", None) if current_user.is_authenticated else None
+    theme = resolve_theme_preference(username)
     return {
         "current_username": username,
         "current_user_display": display,
         "current_role": role,
         "nav_items": visible_nav(role),
+        "current_theme": theme,
         "is_active": is_active,
     }
 
@@ -2346,6 +2363,25 @@ def assistant_view():
         stats=stats,
     )
 
+
+@app.route("/theme", methods=["POST"], endpoint="theme_update")
+def theme_update():
+    payload = request.get_json(silent=True) or {}
+    theme = str(payload.get("theme", "")).lower()
+    if theme not in {"light", "dark"}:
+        return jsonify({"error": "invalid theme"}), 400
+    session["theme"] = theme
+    if current_user.is_authenticated:
+        username = require_username()
+        prefs_all = load_prefs()
+        if not isinstance(prefs_all, dict):
+            prefs_all = {}
+        record = prefs_all.get(username, {}) or {}
+        record["theme"] = theme
+        prefs_all[username] = record
+        save_prefs(prefs_all)
+    return jsonify({"theme": theme})
+
 # ------------------------------- Badges -------------------------------
 
 
@@ -2949,7 +2985,6 @@ def generate_assistant_reply(username: str, prompt: str) -> str:
 # ------------- Run -------------
 if __name__ == "__main__":
     app.run(debug=DEBUG)
-
 
 
 

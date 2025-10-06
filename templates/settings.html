@@ -1,12 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
-{% block head_extra %}
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      document.body.classList.add('theme-{{ my_prefs.theme|default("light") }}');
-    });
-  </script>
-{% endblock %}
+{% block head_extra %}{% endblock %}
 {% block content %}
   <div class="container">
     <h1>Settings</h1>
@@ -84,9 +78,17 @@
 {% block scripts %}
   {{ super() }}
   <script>
-    document.getElementById('theme').addEventListener('change', function (ev) {
-      document.body.classList.remove('theme-light', 'theme-dark');
-      document.body.classList.add('theme-' + ev.target.value);
-    });
+    (function () {
+      const select = document.getElementById('theme');
+      if (!select) { return; }
+      select.addEventListener('change', function (ev) {
+        if (window.applyTheme) {
+          window.applyTheme(ev.target.value, { persistLocal: true, notifyServer: false });
+        } else {
+          document.body.classList.remove('theme-light', 'theme-dark');
+          document.body.classList.add('theme-' + ev.target.value);
+        }
+      });
+    })();
   </script>
 {% endblock %}

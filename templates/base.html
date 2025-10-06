@@ -8,7 +8,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body class="theme-{{ current_theme or 'light' }}" data-theme="{{ current_theme or 'light' }}" data-initial-theme="{{ current_theme or 'light' }}" data-save-theme-url="{{ url_for('theme_update') if current_username else "" }}" data-csrf="{{ csrf_token() }}">
+  <button id="themeToggle" class="theme-toggle-button" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
+    <span class="theme-toggle-icon" aria-hidden="true">&#9790;</span>
+  </button>
   {% set authed = session.get('username') %}
   {% set role_for_layout = current_role if authed else 'member' %}
   <div class="app-shell">
@@ -35,6 +38,78 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe" crossorigin="anonymous"></script>
+  <script>
+    (function () {
+      const body = document.body;
+      const toggle = document.getElementById('themeToggle');
+      const icon = toggle ? toggle.querySelector('.theme-toggle-icon') : null;
+      const storageKey = 'themePreference';
+      const saveUrl = body.dataset.saveThemeUrl || '';
+      const csrfToken = body.dataset.csrf || '';
+
+      function setButtonState(theme) {
+        if (!toggle) { return; }
+        const isDark = theme === 'dark';
+        const label = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+        toggle.setAttribute('aria-label', label);
+        toggle.setAttribute('title', label);
+        if (icon) {
+          icon.innerHTML = isDark ? '&#9788;' : '&#9790;';
+        }
+      }
+
+      function applyTheme(theme, options) {
+        options = options || {};
+        const persistLocal = options.persistLocal !== undefined ? options.persistLocal : true;
+        const notifyServer = options.notifyServer !== undefined ? options.notifyServer : !!saveUrl;
+        const target = theme === 'dark' ? 'dark' : 'light';
+        if (!body.classList.contains('theme-' + target)) {
+          body.classList.remove('theme-light', 'theme-dark');
+          body.classList.add('theme-' + target);
+        }
+        body.dataset.theme = target;
+        if (persistLocal) {
+          try {
+            localStorage.setItem(storageKey, target);
+          } catch (error) {
+            /* ignore */
+          }
+        }
+        setButtonState(target);
+        if (notifyServer && saveUrl) {
+          fetch(saveUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ theme: target })
+          }).catch(function () { /* ignore */ });
+        }
+        return target;
+      }
+
+      window.applyTheme = applyTheme;
+
+      var stored = null;
+      try {
+        stored = localStorage.getItem(storageKey);
+      } catch (error) {
+        stored = null;
+      }
+
+      const initial = stored || body.dataset.initialTheme || 'light';
+      applyTheme(initial, { persistLocal: stored === null, notifyServer: false });
+
+      if (toggle) {
+        toggle.addEventListener('click', function () {
+          const current = body.dataset.theme === 'dark' ? 'dark' : 'light';
+          const next = current === 'dark' ? 'light' : 'dark';
+          applyTheme(next, { persistLocal: true, notifyServer: true });
+        });
+      }
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
