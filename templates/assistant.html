@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}AI Assistant{% endblock %}
+{% block head_extra %}
+  {{ super() }}
+  <script src="https://cdn.tailwindcss.com"></script>
+{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto py-6">
+  <div class="bg-white/80 rounded-3xl shadow p-6 border border-slate-200">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h1 class="text-2xl font-semibold text-slate-800">Task Assistant</h1>
+        <p class="text-slate-500 text-sm">Talk with a lightweight helper that knows your tasks and badges.</p>
+      </div>
+      {% if progress %}
+        <div class="text-right">
+          <p class="text-sm text-slate-500">Next badge goal</p>
+          <p class="text-lg font-medium text-slate-700">{{ progress.badge.name }}</p>
+          <p class="text-xs text-slate-400">{{ progress.current }} / {{ progress.target }}</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <div id="chat-log" class="space-y-4 max-h-96 overflow-y-auto pr-2">
+      {% if not messages %}
+        <div class="text-center py-10 text-slate-400 text-sm">
+          Start a conversation—try asking “Plan my next 3 tasks”.
+        </div>
+      {% else %}
+        {% for message in messages %}
+          {% if message.role == 'user' %}
+            <div class="flex justify-end">
+              <div class="bg-sky-500 text-white px-4 py-3 rounded-2xl rounded-br-none max-w-xs text-sm shadow-sm">
+                <p>{{ message.content }}</p>
+                <p class="text-white/70 text-xs mt-1">You · {{ message.timestamp }}</p>
+              </div>
+            </div>
+          {% else %}
+            <div class="flex justify-start">
+              <div class="bg-slate-100 text-slate-700 px-4 py-3 rounded-2xl rounded-bl-none max-w-xl text-sm shadow-sm">
+                {% for line in message.content.split('\n') %}
+                  {% if line %}
+                    <p class="{% if line.startswith('- ') %}pl-3 relative before:absolute before:left-0 before:top-1.5 before:w-1 before:h-1 before:bg-slate-400 before:rounded-full{% endif %}">{{ line }}</p>
+                  {% else %}
+                    <div class="h-2"></div>
+                  {% endif %}
+                {% endfor %}
+                <p class="text-slate-400 text-xs mt-2">Assistant · {{ message.timestamp }}</p>
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <form class="mt-6" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="prompt" class="sr-only">Ask the assistant</label>
+      <textarea id="prompt" name="prompt" rows="3" class="w-full rounded-2xl border border-slate-200 focus:border-sky-500 focus:ring-sky-500 text-sm px-4 py-3" placeholder="Ask for a plan, summary, or suggestions...">{{ request.form.prompt }}</textarea>
+      <div class="flex items-center justify-between mt-3 text-xs text-slate-400">
+        <span>Need ideas? Try “Summarize what I accomplished this week.”</span>
+        <button class="bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium px-4 py-2 rounded-full transition">Send</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script>
+    const logEl = document.getElementById('chat-log');
+    if (logEl) {
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+  </script>
+{% endblock %}

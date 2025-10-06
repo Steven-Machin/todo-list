@@ -2307,6 +2307,45 @@ def notifications_settings():
         discord_webhook=discord_webhook,
     )
 
+
+# ------------------------------- Assistant -------------------------------
+@app.route("/assistant", methods=["GET", "POST"], endpoint="assistant")
+@login_required
+def assistant_view():
+    username = require_username()
+    history = load_assistant_history()
+    convo = history.get(username, [])
+
+    if request.method == "POST":
+        prompt = (request.form.get("prompt") or "").strip()
+        if not prompt:
+            flash("Ask me something to get started!")
+            return redirect(url_for("assistant"))
+
+        timestamp = datetime.utcnow().isoformat(timespec="seconds")
+        convo.append({"role": "user", "content": prompt, "timestamp": timestamp})
+
+        reply = generate_assistant_reply(username, prompt)
+        convo.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat(timespec="seconds")})
+
+        # Keep the last 40 entries per user
+        history[username] = convo[-40:]
+        save_assistant_history(history)
+        return redirect(url_for("assistant"))
+
+    stats = get_user_completion_stats(username, load_tasks())
+    badge_catalog = get_badge_catalog()
+    earned = get_user_badges(username)
+    earned_slugs = {badge.get("slug") for badge in earned}
+    progress = get_next_badge_progress(stats, earned_slugs, badge_catalog)
+
+    return render_template(
+        "assistant.html",
+        messages=convo,
+        progress=progress,
+        stats=stats,
+    )
+
 # ------------------------------- Badges -------------------------------
 
 
@@ -2793,8 +2832,124 @@ def persist_notification_settings(username: str, new_settings: dict) -> None:
     prefs_all[username] = current
     save_prefs(prefs_all)
 
+
+# ------------------------------- Assistant helpers -------------------------------
+
+PRIORITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}
+
+
+def _user_visible_tasks(username: str, users: list[dict] | None = None) -> list[dict]:
+    users = users or load_users()
+    tasks = []
+    uname = _norm(username)
+    if not uname:
+        return tasks
+    for task in load_tasks():
+        if task_visible_to(task, uname, users):
+            tasks.append(task)
+    return tasks
+
+
+
+def _format_task_summary(task: dict) -> str:
+    title = task.get("text") or "Task"
+    priority = task.get("priority") or "Medium"
+    due = task.get("due_date") or task.get("due")
+    due_label = f" due {due}" if due else ""
+    return f"- {title} ({priority}{due_label})"
+
+
+
+def generate_assistant_reply(username: str, prompt: str) -> str:
+    prompt_lower = prompt.lower()
+    users = load_users()
+    tasks_all = load_tasks()
+    visible_tasks = [task for task in tasks_all if task_visible_to(task, username, users)]
+    open_tasks = [task for task in visible_tasks if not task.get("done")]
+
+    stats = get_user_completion_stats(username, tasks_all)
+    earned = get_user_badges(username)
+    badge_catalog = get_badge_catalog()
+    earned_slugs = {badge.get("slug") for badge in earned}
+    progress = get_next_badge_progress(stats, earned_slugs, badge_catalog)
+
+    lines: list[str] = []
+
+    if "plan" in prompt_lower and "task" in prompt_lower:
+        lines.append("Here is a focused plan for your next tasks:")
+
+        def sort_key(task: dict):
+            priority = PRIORITY_ORDER.get(task.get("priority"), 3)
+            due_str = task.get("due_date") or task.get("due")
+            due_dt = parse_dt_any(due_str) if due_str else None
+            due_sort = due_dt or datetime.max
+            return (priority, due_sort, task.get("text") or "")
+
+        top_tasks = sorted(open_tasks, key=sort_key)[:3]
+        if top_tasks:
+            lines.extend(_format_task_summary(task) for task in top_tasks)
+        else:
+            lines.append("- No open tasks found. Maybe create a new one?")
+        lines.append("")
+
+    if ("summarize" in prompt_lower or "summary" in prompt_lower) and ("week" in prompt_lower or "accomplish" in prompt_lower):
+        completed = []
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        for task in visible_tasks:
+            if not task.get("done"):
+                continue
+            completed_at = parse_dt_any(task.get("completed_at") or "")
+            if completed_at and completed_at >= seven_days_ago:
+                completed.append(task)
+        if completed:
+            lines.append("Wins from the past 7 days:")
+            for task in completed[:5]:
+                lines.append(_format_task_summary(task))
+            if len(completed) > 5:
+                lines.append(f"... and {len(completed) - 5} more.")
+        else:
+            lines.append("It looks like no tasks were completed in the last week. Let's change that!")
+        lines.append("")
+
+    if "suggest" in prompt_lower and ("category" in prompt_lower or "tag" in prompt_lower):
+        tag_counts: dict[str, int] = {}
+        for task in visible_tasks:
+            tags = task.get("tags") or []
+            if isinstance(tags, list):
+                for tag in tags:
+                    if not tag:
+                        continue
+                    tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        if tag_counts:
+            sorted_tags = sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)[:5]
+            lines.append("Here are categories your tasks already hint at:")
+            for tag, count in sorted_tags:
+                lines.append(f"- {tag} (used {count} time{'s' if count != 1 else ''})")
+            lines.append("Try grouping upcoming tasks with these or related tags for clarity.")
+        else:
+            lines.append("I don't see any existing tags yet. Consider themes like Planning, Follow-up, Admin, or Deep Work.")
+        lines.append("")
+
+    if not lines:
+        lines.append("I'm here to help with planning, summaries, and organization. Ask me about your tasks or badges!")
+
+    if progress and progress.get("remaining"):
+        badge = progress.get("badge", {})
+        remaining = int(progress["remaining"])
+        lines.append("")
+        lines.append(f"Badge insight: just {remaining} task{'s' if remaining != 1 else ''} to unlock {badge.get('name', 'your next badge')}!")
+    else:
+        lines.append("")
+        lines.append("Nice work - you're all caught up on current badge goals!")
+
+    return "\n".join(line for line in lines if line is not None)
+
+
+
 # ------------- Run -------------
 if __name__ == "__main__":
     app.run(debug=DEBUG)
+
+
 
 
