@@ -1667,6 +1667,56 @@ def search():
                            msg_hits=msg_hits,
                            user_hits=user_hits)
 
+
+@app.route("/api/tasks/search")
+@login_required
+def api_task_search():
+    query_raw = request.args.get("q", "")
+    query = query_raw.strip()
+    username = require_username()
+    users = load_users()
+
+    visible: list[tuple[int, dict[str, Any]]] = []
+    for idx, task in enumerate(load_tasks()):
+        if task_visible_to(task, username, users):
+            visible.append((idx, task))
+
+    def matches(task: dict[str, Any], needle: str) -> bool:
+        haystacks = [
+            (task.get("text") or "").lower(),
+            (task.get("notes") or "").lower(),
+        ]
+        for tag in task.get("tags") or []:
+            haystacks.append((tag or "").lower())
+        return any(needle in hay for hay in haystacks if hay)
+
+    if query:
+        q_lower = query.lower()
+        filtered = [(idx, task) for idx, task in visible if matches(task, q_lower)]
+    else:
+        filtered = visible
+
+    def serialize(idx: int, task: dict[str, Any]) -> dict[str, Any]:
+        due_val = task.get("due_date") or task.get("due") or ""
+        return {
+            "index": idx,
+            "title": task.get("text") or "",
+            "notes": task.get("notes") or "",
+            "priority": task.get("priority") or "Medium",
+            "due": due_val,
+            "done": bool(task.get("done")),
+            "tags": task.get("tags") or [],
+            "assigned_to": task.get("assigned_to") or "",
+        }
+
+    payload = {
+        "query": query,
+        "count": len(filtered),
+        "tasks": [serialize(idx, task) for idx, task in filtered],
+    }
+    return jsonify(payload)
+
+
 # ------------------------------- Task CRUD / Manager Pages -------------------
 @app.route("/add", methods=["POST"])
 @login_required

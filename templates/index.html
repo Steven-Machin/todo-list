@@ -153,16 +153,29 @@
     </div>
 
     <div class="card subtle" style="margin-top:16px;">
-      <div class="section-head">
+      <div class="section-head flex-column flex-lg-row align-items-lg-center gap-3">
         <h2 style="margin:0;">Your Tasks</h2>
-        <a class="button-secondary" href="{{ url_for('tasks_page') }}">Open Task Manager</a>
+        <div class="ms-lg-auto w-100 w-lg-auto">
+          <label class="form-label mb-1" for="taskSearchInput">Search your tasks</label>
+          <input type="search" class="form-control" id="taskSearchInput" placeholder="Search by title, notes, or tag" autocomplete="off" data-search-endpoint="{{ url_for('api_task_search') }}">
+          <div class="form-text">Results update as you type. Clear the field to see all tasks.</div>
+          <div class="alert alert-danger mt-2 d-none" id="taskSearchError" role="alert"></div>
+        </div>
+        <a class="button-secondary ms-lg-3" href="{{ url_for('tasks_page') }}">Open Task Manager</a>
+      </div>
+
+      <div id="taskSearchResults" class="d-none">
+        <h3 class="h5 mb-2">Search Results</h3>
+        <p class="text-muted small mb-2" id="taskSearchSummary"></p>
+        <ul class="list-plain" id="taskSearchList"></ul>
+        <p class="muted d-none" id="taskSearchEmpty">No matching tasks found.</p>
       </div>
 
       {% set overdue_list = tasks|selectattr('overdue')|list %}
       {% set today = tasks|selectattr('due_today')|list %}
       {% set upcoming = tasks|rejectattr('overdue')|rejectattr('due_today')|selectattr('done','equalto',False)|list %}
 
-      <div class="grid-2" style="grid-template-columns: 1fr 1fr;">
+      <div class="grid-2" style="grid-template-columns: 1fr 1fr;" data-task-default>
         <div>
           <h3>Overdue</h3>
           {% if overdue_list and overdue_list|length > 0 %}
@@ -196,7 +209,7 @@
         </div>
       </div>
 
-      <div style="margin-top:8px;">
+      <div style="margin-top:8px;" data-task-default>
         <h3>Upcoming</h3>
         {% if upcoming and upcoming|length > 0 %}
           <ul class="list-plain">
@@ -216,4 +229,171 @@
       </div>
     </div>
   </div>
+{% endblock %}
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (function () {
+      const input = document.getElementById('taskSearchInput');
+      const resultsSection = document.getElementById('taskSearchResults');
+      const resultsList = document.getElementById('taskSearchList');
+      const emptyNotice = document.getElementById('taskSearchEmpty');
+      const summary = document.getElementById('taskSearchSummary');
+      const errorBox = document.getElementById('taskSearchError');
+      if (!input || !resultsSection || !resultsList || !emptyNotice) {
+        return;
+      }
+      const endpoint = input.getAttribute('data-search-endpoint');
+      if (!endpoint) {
+        return;
+      }
+
+      const defaultSections = document.querySelectorAll('[data-task-default]');
+      let debounceTimer = null;
+      let controller = null;
+
+      function setDefaultsVisible(visible) {
+        defaultSections.forEach(section => {
+          section.classList.toggle('d-none', !visible);
+        });
+      }
+
+      function clearResults() {
+        resultsList.innerHTML = '';
+        emptyNotice.classList.add('d-none');
+        if (summary) {
+          summary.textContent = '';
+        }
+      }
+
+      function resetView() {
+        if (controller) {
+          controller.abort();
+          controller = null;
+        }
+        clearResults();
+        resultsSection.classList.add('d-none');
+        setDefaultsVisible(true);
+        if (errorBox) {
+          errorBox.classList.add('d-none');
+          errorBox.textContent = '';
+        }
+      }
+
+      function renderTasks(tasks, query) {
+        resultsSection.classList.remove('d-none');
+        setDefaultsVisible(false);
+        clearResults();
+
+        if (summary) {
+          if (tasks.length) {
+            const label = tasks.length === 1 ? 'task' : 'tasks';
+            summary.textContent = `Showing ${tasks.length} ${label} for "${query}"`;
+          } else {
+            summary.textContent = `No tasks found for "${query}"`;
+          }
+        }
+
+        if (!tasks.length) {
+          emptyNotice.classList.remove('d-none');
+          return;
+        }
+
+        tasks.forEach(task => {
+          const item = document.createElement('li');
+
+          const title = document.createElement('div');
+          title.className = task.done ? 'fw-semibold text-muted text-decoration-line-through' : 'fw-semibold';
+          title.textContent = task.title || 'Untitled task';
+          item.appendChild(title);
+
+          const metaParts = [];
+          if (task.priority) {
+            metaParts.push(`Priority: ${task.priority}`);
+          }
+          if (task.due) {
+            metaParts.push(`Due ${task.due}`);
+          }
+          if (task.assigned_to) {
+            metaParts.push(`Assigned to ${task.assigned_to}`);
+          }
+          if (task.notes) {
+            metaParts.push(`Notes: ${task.notes}`);
+          }
+
+          if (metaParts.length) {
+            const meta = document.createElement('div');
+            meta.className = 'muted';
+            meta.textContent = metaParts.join(' | ');
+            item.appendChild(meta);
+          }
+
+          if (Array.isArray(task.tags) && task.tags.length) {
+            const tagWrap = document.createElement('div');
+            tagWrap.className = 'd-flex flex-wrap gap-2 mt-2';
+            task.tags.forEach(tag => {
+              const badge = document.createElement('span');
+              badge.className = 'badge rounded-pill text-bg-light border border-secondary-subtle text-secondary';
+              badge.textContent = tag;
+              tagWrap.appendChild(badge);
+            });
+            item.appendChild(tagWrap);
+          }
+
+          resultsList.appendChild(item);
+        });
+      }
+
+      function performSearch(query) {
+        if (!endpoint) {
+          return;
+        }
+        if (controller) {
+          controller.abort();
+        }
+        controller = new AbortController();
+
+        fetch(`${endpoint}?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Search failed');
+            }
+            return response.json();
+          })
+          .then(payload => {
+            if (errorBox) {
+              errorBox.classList.add('d-none');
+              errorBox.textContent = '';
+            }
+            const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+            const effectiveQuery = typeof payload.query === 'string' ? payload.query : query;
+            renderTasks(tasks, effectiveQuery);
+          })
+          .catch(error => {
+            if (error.name === 'AbortError') {
+              return;
+            }
+            resetView();
+            if (errorBox) {
+              errorBox.textContent = 'Unable to search tasks right now. Please try again.';
+              errorBox.classList.remove('d-none');
+            }
+          });
+      }
+
+      resetView();
+
+      input.addEventListener('input', () => {
+        const value = input.value.trim();
+        clearTimeout(debounceTimer);
+        if (!value) {
+          resetView();
+          return;
+        }
+        debounceTimer = setTimeout(() => {
+          performSearch(value);
+        }, 200);
+      });
+    })();
+  </script>
 {% endblock %}
