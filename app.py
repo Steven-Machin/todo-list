@@ -1981,6 +1981,7 @@ def update_titles():
 def calendar_view():
     return render_template("calendar.html", role=current_role())
 
+
 # New unified feed (tasks + shifts), supports ?scope=my|all
 @app.route("/api/calendar")
 @login_required
@@ -1989,71 +1990,162 @@ def calendar_feed():
     if raw_scope not in {"my", "all"}:
         raw_scope = "my"
 
-    user = require_username()
+    username = require_username()
     role = current_role()
     show_all = raw_scope == "all" and role == "manager"
 
     users = load_users()
+    tasks_all = load_tasks()
 
-    # tasks
-    t_all = load_tasks()
-    tasks = t_all if show_all else [
-        t for t in t_all if task_visible_to(t, user, users)
-    ]
+    now = datetime.utcnow()
+    today = date.today()
+    soon_cutoff = now + timedelta(hours=24)
 
-    def normalize_event_start(raw):
-        dt = parse_dt_any(raw)
-        if not dt:
-            return None
-        if dt.time() == datetime.min.time():
-            return dt.date().isoformat()
-        return dt.isoformat()
+    color_map = {
+        "completed": "#2FA77A",
+        "due_soon": "#F3B43E",
+        "overdue": "#E6492D",
+        "upcoming": "#4C6EF5",
+    }
+    text_color_map = {
+        "completed": "#0B5132",
+        "due_soon": "#66460A",
+        "overdue": "#FFFFFF",
+        "upcoming": "#FFFFFF",
+    }
 
-    events = []
-    for i, t in enumerate(tasks):
-        start = normalize_event_start(t.get("due") or t.get("due_date"))
-        if not start:
+    events: List[Dict[str, Any]] = []
+
+    for idx, task in enumerate(tasks_all):
+        if not show_all and not task_visible_to(task, username, users):
             continue
-        pr = t.get("priority", "Medium")
-        color_map = {"High": "#E6492D", "Medium": "#F3B43E", "Low": "#2FA77A"}
-        recurring = normalize_recurring(t.get("recurring"))
-        title = t.get("text", "Task")
+
+        due_raw = task.get("due_date") or task.get("due")
+        if not due_raw:
+            continue
+
+        due_dt = parse_dt_any(due_raw)
+        due_date_only = parse_date(due_raw)
+        if not due_dt and due_date_only:
+            due_dt = datetime.combine(due_date_only, datetime.min.time())
+
+        if not due_dt:
+            continue
+
+        all_day = due_dt.time() == datetime.min.time()
+        done = bool(task.get("done"))
+
+        status = "upcoming"
+        if done:
+            status = "completed"
+        else:
+            if due_date_only and due_date_only < today:
+                status = "overdue"
+            else:
+                comparison_dt = due_dt if not all_day else datetime.combine(due_dt.date(), datetime.max.time())
+                if comparison_dt <= soon_cutoff:
+                    status = "due_soon"
+
+        title = task.get("text") or "Task"
+        recurring = normalize_recurring(task.get("recurring"))
         if recurring:
-            title = f"{title} - Repeats {recurring.title()}"
-        title = f"{title} ({pr})"
+            title = f"{title} (Repeats {recurring.title()})"
+
+        start_value = due_dt.isoformat() if not all_day else due_dt.date().isoformat()
+
         events.append({
-            "id": f"task-{i}",
+            "id": f"task-{idx}",
             "title": title,
-            "start": start,
-            "allDay": True,
-            "color": color_map.get(pr, "#2FA77A"),
+            "start": start_value,
+            "allDay": all_day,
+            "backgroundColor": color_map[status],
+            "borderColor": color_map[status],
+            "textColor": text_color_map.get(status),
+            "classNames": [f"task-status-{status}"],
+            "editable": not done,
+            "durationEditable": False,
             "extendedProps": {
                 "type": "task",
+                "task_id": idx,
+                "status": status,
+                "done": done,
+                "priority": task.get("priority") or "Medium",
+                "assigned_to": task.get("assigned_to"),
+                "assigned_username": task.get("assigned_username"),
+                "notes": task.get("notes") or "",
+                "due_raw": due_raw,
+                "completed_at": task.get("completed_at"),
                 "recurring": recurring,
-                "assigned_to": t.get("assigned_to"),
-                "due_date": t.get("due_date")
-            }
+                "edit_url": url_for("edit", task_id=idx),
+            },
         })
 
-    # shifts
-    sh_all = load_shifts()
-    shifts = sh_all if show_all else [
-        s for s in sh_all if _norm(s.get("assigned_to")) == _norm(user)
+    # shifts remain available for reference when permitted
+    shifts_all = load_shifts()
+    shifts = shifts_all if show_all else [
+        s for s in shifts_all if _norm(s.get("assigned_to")) == _norm(username)
     ]
-    for j, s in enumerate(shifts):
-        day = parse_date(s.get("date"))
-        if not day:
+    for j, shift in enumerate(shifts):
+        shift_day = parse_date(shift.get("date"))
+        if not shift_day:
             continue
         events.append({
             "id": f"shift-{j}",
-            "title": f"Shift {s.get('start_time', '')} - {s.get('end_time', '')}",
-            "start": day.isoformat(),
+            "title": f"Shift {shift.get('start_time', '')} - {shift.get('end_time', '')}",
+            "start": shift_day.isoformat(),
             "allDay": True,
-            "color": "#4C6EF5",
-            "extendedProps": {"type": "shift"}
+            "backgroundColor": "#6C7AE0",
+            "borderColor": "#6C7AE0",
+            "textColor": "#FFFFFF",
+            "extendedProps": {"type": "shift"},
+            "editable": False,
         })
 
     return jsonify(events)
+
+@app.route("/api/tasks/<int:task_id>/due", methods=["PATCH"])
+@login_required
+@demo_guard
+def update_task_due_date(task_id: int):
+    username = require_username()
+    role = current_role()
+    tasks = load_tasks()
+
+    if not (0 <= task_id < len(tasks)):
+        return jsonify({"error": "Task not found"}), 404
+
+    task = tasks[task_id]
+    users = load_users()
+    if role != "manager" and not task_visible_to(task, username, users):
+        return jsonify({"error": "Not authorized"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    due_raw = payload.get("due_date")
+    all_day = bool(payload.get("all_day"))
+    if not due_raw:
+        return jsonify({"error": "Missing due_date"}), 400
+
+    due_dt = parse_dt_any(due_raw)
+    if not due_dt:
+        due_date_only = parse_date(due_raw)
+        if due_date_only:
+            due_dt = datetime.combine(due_date_only, datetime.min.time())
+    if not due_dt:
+        return jsonify({"error": "Invalid due_date"}), 400
+
+    due_dt = due_dt.replace(second=0, microsecond=0)
+    new_due = due_dt.date().isoformat() if all_day else due_dt.isoformat(timespec="minutes")
+
+    task["due_date"] = new_due
+    task["due"] = new_due
+
+    if not task.get("done"):
+        due_date_only = parse_date(new_due)
+        task["overdue"] = bool(due_date_only and due_date_only < date.today())
+
+    save_tasks(tasks)
+    return jsonify({"ok": True, "due_date": new_due})
+
 
 # Legacy (tasks only) – kept for backward compatibility
 @app.route("/api/tasks/events")

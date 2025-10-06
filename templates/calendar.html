@@ -4,53 +4,158 @@
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
   <style>
-    .calendar-toolbar {
-      display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 12px; gap: 8px; flex-wrap: wrap;
-    }
-    .view-toggle { display: inline-flex; border: 1px solid #d9e1ec; border-radius: 8px; overflow: hidden; }
-    .view-toggle button { border: 0; background: #fff; padding: 8px 12px; cursor: pointer; font-weight: 600; }
-    .view-toggle button.active { background: #eef4ff; }
-    #calendar { background: #fff; border-radius: 12px; padding: 8px; box-shadow: 0 1px 2px rgba(16,24,40,.05); min-height: 600px; }
-    .legend { display:flex; align-items:center; gap:12px; font-size:.9rem; opacity:.85; }
-    .legend span { display:inline-flex; align-items:center; gap:6px; }
-    .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
+    .calendar-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:1rem; }
+    .calendar-toolbar h1 { margin:0; font-size:1.5rem; font-weight:600; }
+    .calendar-legend { display:flex; align-items:center; gap:16px; flex-wrap:wrap; font-size:.9rem; }
+    .legend-item { display:inline-flex; align-items:center; gap:6px; }
+    .legend-dot { width:12px; height:12px; border-radius:50%; display:inline-block; }
+    .legend-dot.completed { background:#2FA77A; }
+    .legend-dot.due-soon { background:#F3B43E; }
+    .legend-dot.overdue { background:#E6492D; }
+    .legend-dot.upcoming { background:#4C6EF5; }
+    #calendar { background:#fff; border-radius:12px; padding:8px; box-shadow:0 1px 2px rgba(15,23,42,0.08); min-height:640px; }
+    .view-toggle { display:inline-flex; border:1px solid #dbe1ec; border-radius:8px; overflow:hidden; }
+    .view-toggle button { border:0; background:#fff; padding:8px 14px; font-weight:600; cursor:pointer; color:#1f2937; }
+    .view-toggle button.active { background:#eef4ff; color:#1d4ed8; }
+    .task-status-badge { display:inline-flex; align-items:center; gap:6px; font-size:.85rem; padding:4px 8px; border-radius:999px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+    .task-status-badge[data-status="completed"] { background:rgba(47,167,122,0.15); color:#0b5132; }
+    .task-status-badge[data-status="due_soon"] { background:rgba(243,180,62,0.25); color:#66460A; }
+    .task-status-badge[data-status="overdue"] { background:rgba(230,73,45,0.25); color:#7f1d1d; }
+    .task-status-badge[data-status="upcoming"] { background:rgba(76,110,245,0.2); color:#1e3a8a; }
+    .task-modal-label { font-size:.8rem; font-weight:600; text-transform:uppercase; color:#64748b; margin-bottom:4px; }
+    .task-modal-value { font-size:1rem; color:#1f2937; }
+    .task-modal-notes { background:#f8fafc; border-radius:8px; padding:12px; min-height:60px; white-space:pre-wrap; }
   </style>
 {% endblock %}
 {% block content %}
-  <div class="container">
+  <div class="container-xl py-4">
     <div class="calendar-toolbar">
-      <h1 style="margin:0;">Calendar</h1>
-
-      <div class="legend">
-        <span><i class="dot" style="background:#E6492D;"></i> High Priority Task</span>
-        <span><i class="dot" style="background:#F3B43E;"></i> Medium Priority Task</span>
-        <span><i class="dot" style="background:#2FA77A;"></i> Low Priority Task</span>
-        <span><i class="dot" style="background:#4C6EF5;"></i> Shift</span>
+      <h1>Task Calendar</h1>
+      <div class="calendar-legend">
+        <span class="legend-item"><span class="legend-dot completed"></span>Completed</span>
+        <span class="legend-item"><span class="legend-dot due-soon"></span>Due Soon (24h)</span>
+        <span class="legend-item"><span class="legend-dot overdue"></span>Overdue</span>
+        <span class="legend-item"><span class="legend-dot upcoming"></span>Upcoming</span>
       </div>
-
       {% if current_role == 'manager' %}
       <div class="view-toggle" role="group" aria-label="Calendar scope">
-        <button id="btnMy"  class="active" type="button">My</button>
-        <button id="btnAll" type="button">All</button>
+        <button id="btnMy" type="button" class="active">My Tasks</button>
+        <button id="btnAll" type="button">Team Tasks</button>
       </div>
       {% endif %}
     </div>
 
-    <div id="calendar"></div>
+    <div id="calendar"
+         data-update-url-base="{{ url_for('update_task_due_date', task_id=0).rsplit('/', 2)[0] }}"
+         data-task-list-url="{{ url_for('task_manager') if current_role == 'manager' else url_for('index') }}">
+    </div>
+  </div>
+
+  <div class="modal fade" id="taskDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title h5 mb-1" id="taskModalTitle">Task</h2>
+            <span class="task-status-badge" data-status="upcoming" id="taskModalStatus">Upcoming</span>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <div class="task-modal-label">Due</div>
+            <div class="task-modal-value" id="taskModalDue">—</div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <div class="task-modal-label">Priority</div>
+              <div class="task-modal-value" id="taskModalPriority">—</div>
+            </div>
+            <div class="col-md-6">
+              <div class="task-modal-label">Assigned To</div>
+              <div class="task-modal-value" id="taskModalAssignee">—</div>
+            </div>
+          </div>
+          <div class="task-modal-label">Notes</div>
+          <div class="task-modal-notes" id="taskModalNotes">No notes yet.</div>
+        </div>
+        <div class="modal-footer d-flex justify-content-between">
+          <a class="btn btn-outline-secondary" id="taskModalOpenList" href="#" target="_blank">Open Task List</a>
+          <button type="button" class="btn btn-primary" id="taskModalEdit">Edit Task</button>
+        </div>
+      </div>
+    </div>
   </div>
 {% endblock %}
 {% block scripts %}
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const calEl = document.getElementById('calendar');
+      if (!calEl) { return; }
+
+      const updateUrlBase = calEl.dataset.updateUrlBase || '';
+      const taskListUrl = calEl.dataset.taskListUrl || '#';
+      const modalEl = document.getElementById('taskDetailModal');
+      const modalInstance = modalEl ? new bootstrap.Modal(modalEl) : null;
+      const modalTitle = document.getElementById('taskModalTitle');
+      const modalStatus = document.getElementById('taskModalStatus');
+      const modalDue = document.getElementById('taskModalDue');
+      const modalPriority = document.getElementById('taskModalPriority');
+      const modalAssignee = document.getElementById('taskModalAssignee');
+      const modalNotes = document.getElementById('taskModalNotes');
+      const modalEditBtn = document.getElementById('taskModalEdit');
+      const modalListLink = document.getElementById('taskModalOpenList');
+
+      modalListLink.href = taskListUrl;
 
       if (!window.FullCalendar) {
-        calEl.innerHTML = "<div style='padding:12px;'>FullCalendar failed to load. Check your network or CDN URL.</div>";
+        calEl.innerHTML = "<div class='alert alert-danger m-0'>FullCalendar failed to load. Please check your connection.</div>";
         return;
       }
 
       let scope = 'my';
+      const statusLabels = {
+        completed: 'Completed',
+        due_soon: 'Due Soon',
+        overdue: 'Overdue',
+        upcoming: 'Upcoming'
+      };
+
+      const showTaskModal = (event) => {
+        if (!modalInstance || !event) { return; }
+        const props = event.extendedProps || {};
+        modalTitle.textContent = event.title || 'Task';
+        const status = props.status || 'upcoming';
+        modalStatus.textContent = statusLabels[status] || 'Task';
+        modalStatus.dataset.status = status;
+
+        let dueLabel = '—';
+        if (event.start) {
+          const options = event.allDay ? { dateStyle: 'long' } : { dateStyle: 'long', timeStyle: 'short' };
+          dueLabel = new Intl.DateTimeFormat(undefined, options).format(event.start);
+        }
+        modalDue.textContent = dueLabel;
+        modalPriority.textContent = props.priority || 'Medium';
+        modalAssignee.textContent = props.assigned_to || 'Unassigned';
+        modalNotes.textContent = props.notes ? props.notes : 'No notes yet.';
+
+        const editUrl = props.edit_url || taskListUrl;
+        modalEditBtn.dataset.editUrl = editUrl;
+
+        modalInstance.show();
+      };
+
+      modalEditBtn.addEventListener('click', () => {
+        const editUrl = modalEditBtn.dataset.editUrl;
+        if (editUrl) {
+          window.location.href = editUrl;
+        }
+      });
+
+      const buildUpdateUrl = (taskId) => {
+        if (!updateUrlBase) { return null; }
+        return `${updateUrlBase}/${taskId}/due`;
+      };
 
       const calendar = new FullCalendar.Calendar(calEl, {
         initialView: 'dayGridMonth',
@@ -60,43 +165,79 @@
           center: 'title',
           right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
-        events: function(info, success, failure) {
-          fetch(`{{ url_for('calendar_feed') }}?scope=${scope}`)
-            .then(r => r.json())
-            .then(data => success(data))
-            .catch(err => {
-              console.error(err);
-              failure(err);
-              calEl.insertAdjacentHTML('beforeend',
-                "<div style='padding:10px;color:#b42318;'>Couldn't load events.</div>");
-            });
+        eventSources: [{
+          events: function(info, success, failure) {
+            fetch(`{{ url_for('calendar_feed') }}?scope=${scope}`)
+              .then((response) => {
+                if (!response.ok) { throw new Error('Failed to load events'); }
+                return response.json();
+              })
+              .then((data) => success(data))
+              .catch((error) => {
+                console.error(error);
+                failure(error);
+              });
+          }
+        }],
+        editable: true,
+        eventDurationEditable: false,
+        eventAllow: function(dropInfo, draggedEvent) {
+          if ((draggedEvent.extendedProps || {}).type !== 'task') {
+            return false;
+          }
+          return !(draggedEvent.extendedProps || {}).done;
+        },
+        eventClassNames: function(arg) {
+          const status = (arg.event.extendedProps || {}).status;
+          if (status) {
+            return [`fc-task-${status}`];
+          }
+          return [];
         },
         eventClick: function(info) {
-          const e = info.event;
-          const props = e.extendedProps || {};
-          const type = props.type ? props.type : 'event';
-          const when = e.start ? new Date(e.start).toLocaleString() : 'N/A';
-          const lines = [
-            type.toUpperCase(),
-            '',
-            e.title,
-            `When: ${when}`
-          ];
-          if (props.assigned_to) {
-            lines.push(`Assigned to: ${props.assigned_to}`);
+          if ((info.event.extendedProps || {}).type !== 'task') {
+            return;
           }
-          if (props.recurring) {
-            lines.push(`Repeats: ${props.recurring}`);
+          info.jsEvent.preventDefault();
+          showTaskModal(info.event);
+        },
+        eventDrop: function(info) {
+          const props = info.event.extendedProps || {};
+          if (props.type !== 'task') {
+            return;
           }
-          alert(lines.join('\n'));
+          const updateUrl = buildUpdateUrl(props.task_id);
+          if (!updateUrl) {
+            info.revert();
+            return;
+          }
+          fetch(updateUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              due_date: info.event.startStr,
+              all_day: info.event.allDay
+            })
+          })
+          .then((response) => {
+            if (!response.ok) { throw new Error('Failed to update due date'); }
+            return response.json();
+          })
+          .then(() => {
+            calendar.refetchEvents();
+          })
+          .catch((error) => {
+            console.error(error);
+            info.revert();
+            alert('Unable to update the task due date.');
+          });
         }
       });
 
       calendar.render();
 
-      const btnMy  = document.getElementById('btnMy');
+      const btnMy = document.getElementById('btnMy');
       const btnAll = document.getElementById('btnAll');
-
       if (btnMy && btnAll) {
         btnMy.addEventListener('click', () => {
           if (scope !== 'my') {
