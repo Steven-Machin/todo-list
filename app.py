@@ -35,6 +35,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
+from notifications.channels import send_email as send_notification_email
+from notifications.models import NotificationMessage, Recipient
+
 from notifications.config import (
     DEFAULT_NOTIFICATION_PREFS as NOTIFICATION_DEFAULTS,
     VALID_CHANNELS as NOTIFICATION_CHANNELS,
@@ -1229,6 +1232,35 @@ def save_prefs(p):            save_json(PREFERENCES_FILE, p)
 def load_resets():            return load_json(PASSWORD_RESETS_FILE, {})
 def save_resets(data):        save_json(PASSWORD_RESETS_FILE, data)
 
+
+
+def dispatch_password_reset_email(username: str, email: str | None, reset_url: str) -> bool:
+    if not email:
+        return False
+    try:
+        message = NotificationMessage(
+            subject="Reset your To-Do password",
+            body_text=(
+                f"Hello {username or 'there'},\n\n"
+                "We received a request to reset the password for your To-Do account. "
+                "Use the link below within the next hour to choose a new password:\n\n"
+                f"{reset_url}\n\n"
+                "If you did not request this change, you can safely ignore this email."
+            ),
+            body_html=(
+                f"<p>Hello {username or 'there'},</p>"
+                "<p>We received a request to reset the password for your To-Do account. "
+                "Use the link below within the next hour to choose a new password:</p>"
+                f"<p><a href=\"{reset_url}\">{reset_url}</a></p>"
+                "<p>If you did not request this change, you can safely ignore this email.</p>"
+            ),
+            category="password_reset",
+        )
+        recipient = Recipient(username=username or email, email=email, channels=["email"])
+        return send_notification_email(recipient, message)
+    except Exception:
+        return False
+
 def seed_demo_data():
     if not DEMO:
         return
@@ -1420,62 +1452,77 @@ def logout():
     return redirect(url_for("login"))
 
 # ------------------------------- Forgot / Reset Password ---------------------
-@app.route("/forgot", methods=["GET", "POST"])
+@app.route("/reset_password_request", methods=["GET", "POST"])
 @demo_guard
-def forgot():
+def reset_password_request():
     if request.method == "POST":
-        uname = request.form.get("username", "").strip().lower()
+        email_raw = request.form.get("email", "").strip()
+        if not email_raw:
+            flash("Please provide the email address associated with your account.")
+            return render_template("reset_password_request.html")
+
+        email_lookup = email_raw.lower()
         users = load_users()
-        user = next((u for u in users if u["username"] == uname), None)
+        target_user = None
+        for entry in users:
+            stored_email = (entry.get("email") or "").strip().lower()
+            if stored_email and stored_email == email_lookup:
+                target_user = entry
+                break
 
-        # Always pretend success to avoid user enumeration
-        if not user:
-            flash("If that account exists, a reset link was created.")
-            return render_template("forgot_sent.html", reset_url=None)
+        reset_url = None
+        email_sent = False
+        if target_user:
+            token = secrets.token_urlsafe(32)
+            expires = (datetime.now() + timedelta(hours=1)).isoformat(timespec="minutes")
+            resets = load_resets()
+            resets[token] = {"username": target_user["username"], "expires": expires}
+            save_resets(resets)
 
-        tok = uuid.uuid4().hex
-        expires = (datetime.now() + timedelta(minutes=60)).isoformat(timespec="minutes")
-        resets = load_resets()
-        resets[tok] = {"username": uname, "expires": expires}
-        save_resets(resets)
+            reset_url = url_for("reset_password", token=token, _external=True)
+            email_sent = dispatch_password_reset_email(target_user["username"], target_user.get("email"), reset_url)
 
-        reset_url = url_for("reset_password", token=tok, _external=False)
-        flash("Use the link below to reset your password.")
-        return render_template("forgot_sent.html", reset_url=reset_url)
+        flash("If an account with that email exists, we sent password reset instructions.")
+        preview_link = reset_url if (reset_url and not email_sent) else None
+        return render_template("reset_password_sent.html", preview_link=preview_link, email_sent=email_sent)
 
-    return render_template("forgot.html")
+    return render_template("reset_password_request.html")
 
-@app.route("/reset/<token>", methods=["GET", "POST"])
+
+@app.route("/reset_password/<token>", methods=["GET", "POST"])
 @demo_guard
 def reset_password(token):
     resets = load_resets()
-    rec = resets.get(token)
-    if not rec:
+    record = resets.get(token)
+    if not record:
         flash("Invalid or expired reset link.")
         return redirect(url_for("login"))
 
     try:
-        exp = datetime.fromisoformat(rec["expires"])
-        if datetime.now() > exp:
+        expires_at = datetime.fromisoformat(record["expires"])
+        if datetime.now() > expires_at:
             resets.pop(token, None)
             save_resets(resets)
             flash("Reset link has expired.")
-            return redirect(url_for("forgot"))
+            return redirect(url_for("reset_password_request"))
     except Exception:
         pass
 
     if request.method == "POST":
         pw1 = request.form.get("password", "")
         pw2 = request.form.get("password2", "")
-        if not pw1 or pw1 != pw2:
+        if len(pw1) < 6:
+            flash("Password must be at least 6 characters long.")
+            return render_template("reset_password.html", token=token)
+        if pw1 != pw2:
             flash("Passwords must match.")
-            return render_template("reset.html", token=token)
+            return render_template("reset_password.html", token=token)
 
         users = load_users()
-        uname = rec["username"]
-        for u in users:
-            if u["username"] == uname:
-                u["password"] = generate_password_hash(pw1)
+        target_username = record["username"]
+        for user in users:
+            if _norm(user.get("username")) == _norm(target_username):
+                user["password"] = generate_password_hash(pw1)
                 break
         save_users(users)
 
@@ -1485,7 +1532,7 @@ def reset_password(token):
         flash("Password updated. Please log in.")
         return redirect(url_for("login"))
 
-    return render_template("reset.html", token=token)
+    return render_template("reset_password.html", token=token)
 
 # ------------------------------- Home / Dashboard -----------------------------
 @app.route("/", endpoint="dashboard")
