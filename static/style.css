@@ -583,3 +583,32 @@ table {
   color: var(--text-secondary);
   transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease;
 }
+
+.breadcrumb-bar {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 8px 18px;
+  margin: 0 24px 18px;
+  box-shadow: 0 6px 16px var(--shadow-soft);
+  transition: background-color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+}
+
+.breadcrumb {
+  margin-bottom: 0;
+  color: var(--text-secondary);
+}
+
+.breadcrumb a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-item.active {
+  color: var(--text-primary);
+}
+

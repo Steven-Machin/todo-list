@@ -1,7 +1,7 @@
 # app.py
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, session, jsonify, abort
+    flash, session, jsonify, abort, g
 )
 import calendar
 import json, os, uuid, secrets, contextlib, tempfile
@@ -408,6 +408,33 @@ def resolve_theme_preference(username: str | None) -> str:
     return "light"
 
 
+def set_breadcrumbs(*items):
+    crumbs = []
+    for item in items:
+        if not item:
+            continue
+        if isinstance(item, dict):
+            title = item.get('title')
+            url = item.get('url')
+        else:
+            try:
+                title, url = item
+            except (TypeError, ValueError):
+                title, url = str(item), None
+        if not title:
+            continue
+        crumbs.append({'title': title, 'url': url})
+    g.breadcrumbs = crumbs
+
+
+def current_breadcrumbs():
+    crumbs = getattr(g, 'breadcrumbs', None)
+    if crumbs:
+        return crumbs
+    return []
+
+
+
 @app.context_processor
 def inject_user_ctx():
     role = current_role()
@@ -420,6 +447,7 @@ def inject_user_ctx():
         "current_role": role,
         "nav_items": visible_nav(role),
         "current_theme": theme,
+        "breadcrumbs": current_breadcrumbs(),
         "is_active": is_active,
     }
 
@@ -1462,6 +1490,7 @@ def reset_password(token):
 @login_required
 def index():
     username = require_username()
+    set_breadcrumbs(("Home", None))
     role = current_role()
     today = date.today()
 
@@ -1793,12 +1822,14 @@ def edit(task_id):
                     for u in users
                     if u.get("role")!="manager"
                 ]
+                set_breadcrumbs(("Home", url_for("dashboard")), ("Tasks", url_for("tasks_page")), ("Edit Task", None))
                 return render_template("edit.html", task=t, task_id=task_id, assignable_users=assignable, role=role)
     return redirect(url_for("tasks_page" if role=="manager" else "index"))
 
 @app.route("/tasks", endpoint="task_manager")
 @manager_required
 def tasks_page():
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Tasks", None))
     sort_by = request.args.get("sort", "due_asc")
     all_tasks = load_tasks()
 
@@ -2003,6 +2034,7 @@ def update_titles():
 @app.route("/calendar", endpoint="calendar")
 @login_required
 def calendar_view():
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Calendar", None))
     return render_template("calendar.html", role=current_role())
 
 
@@ -2199,6 +2231,7 @@ def task_events():
 @login_required
 def settings():
     user = require_username()
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Settings", None))
 
     # load prefs (with defaults)
     prefs_all = load_prefs()
@@ -2330,6 +2363,7 @@ def notifications_settings():
 @login_required
 def assistant_view():
     username = require_username()
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Assistant", None))
     history = load_assistant_history()
     convo = history.get(username, [])
 
@@ -2389,6 +2423,7 @@ def theme_update():
 @login_required
 def profile():
     username = require_username()
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Profile", None))
     user_record = find_user_record(username)
     if not user_record:
         abort(404)
