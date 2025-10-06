@@ -35,6 +35,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
+from notifications.config import (
+    DEFAULT_NOTIFICATION_PREFS as NOTIFICATION_DEFAULTS,
+    VALID_CHANNELS as NOTIFICATION_CHANNELS,
+    VALID_FREQUENCIES as NOTIFICATION_FREQUENCIES,
+    WEEKDAY_OPTIONS as NOTIFICATION_WEEKDAYS,
+)
+
 
 try:
     import fcntl  # type: ignore[import]
@@ -2231,6 +2238,75 @@ def settings_update():
     flash("Settings saved.")
     return redirect(url_for("settings"))
 
+@app.route("/settings/notifications", methods=["GET", "POST"])
+@login_required
+@demo_guard
+def notifications_settings():
+    username = require_username()
+    notif_settings = load_notification_settings_for(username)
+
+    frequency_choices = [("daily", "Daily"), ("weekly", "Weekly"), ("off", "Off")]
+    channel_choices = [("email", "Email"), ("discord", "Discord webhook")]
+    weekday_choices = NOTIFICATION_WEEKDAYS
+
+    record = find_user_record(username) or {}
+    contact_email = record.get("email") or ""
+    discord_webhook = record.get("discord_webhook") or ""
+
+    if request.method == "POST":
+        updated = dict(notif_settings)
+        freq = request.form.get("frequency", updated["frequency"]).lower()
+        if freq not in NOTIFICATION_FREQUENCIES:
+            freq = updated["frequency"]
+        updated["frequency"] = freq
+
+        updated["channels"] = normalize_notification_channels(request.form.getlist("channels"))
+
+        try:
+            updated["daily_hour"] = max(0, min(23, int(request.form.get("daily_hour", updated["daily_hour"]))))
+        except (TypeError, ValueError):
+            pass
+        try:
+            updated["weekly_day"] = max(0, min(6, int(request.form.get("weekly_day", updated["weekly_day"]))))
+        except (TypeError, ValueError):
+            pass
+
+        updated["summary_enabled"] = bool(request.form.get("summary_enabled"))
+        updated["overdue_enabled"] = bool(request.form.get("overdue_enabled"))
+        updated["badge_enabled"] = bool(request.form.get("badge_enabled"))
+
+        persist_notification_settings(username, updated)
+
+        email_value = request.form.get("email", "").strip()
+        discord_value = request.form.get("discord_webhook", "").strip()
+        users = load_users()
+        for user in users:
+            if _norm(user.get("username")) != username:
+                continue
+            if email_value:
+                user["email"] = email_value
+            else:
+                user.pop("email", None)
+            if discord_value:
+                user["discord_webhook"] = discord_value
+            else:
+                user.pop("discord_webhook", None)
+            save_users(users)
+            break
+
+        flash("Notification preferences updated.")
+        return redirect(url_for("notifications_settings"))
+
+    return render_template(
+        "settings_notifications.html",
+        settings=notif_settings,
+        frequency_choices=frequency_choices,
+        channel_choices=channel_choices,
+        weekday_choices=weekday_choices,
+        contact_email=contact_email,
+        discord_webhook=discord_webhook,
+    )
+
 # ------------------------------- Badges -------------------------------
 
 
@@ -2668,6 +2744,57 @@ for rule, canonical, legacy in LEGACY_ENDPOINT_ALIASES:
     if canonical in app.view_functions and legacy not in app.view_functions:
         app.add_url_rule(rule, endpoint=legacy, view_func=app.view_functions[canonical])
 
+
+def notification_defaults() -> dict:
+    return dict(NOTIFICATION_DEFAULTS)
+
+
+def normalize_notification_channels(channels) -> list[str]:
+    normalized: list[str] = []
+    if not channels:
+        return list(NOTIFICATION_DEFAULTS.get("channels", ["email"]))
+    for channel in channels:
+        if not channel:
+            continue
+        slug = str(channel).strip().lower()
+        if slug in NOTIFICATION_CHANNELS and slug not in normalized:
+            normalized.append(slug)
+    return normalized or list(NOTIFICATION_DEFAULTS.get("channels", ["email"]))
+
+
+def load_notification_settings_for(username: str) -> dict:
+    prefs_all = load_prefs()
+    entry = prefs_all.get(username, {}) if isinstance(prefs_all, dict) else {}
+    settings = notification_defaults()
+    if isinstance(entry, dict):
+        settings.update(entry.get("notifications") or {})
+    settings["frequency"] = str(settings.get("frequency", "daily")).lower()
+    settings["channels"] = normalize_notification_channels(settings.get("channels"))
+    try:
+        settings["daily_hour"] = max(0, min(23, int(settings.get("daily_hour", 7))))
+    except (TypeError, ValueError):
+        settings["daily_hour"] = NOTIFICATION_DEFAULTS.get("daily_hour", 7)
+    try:
+        settings["weekly_day"] = max(0, min(6, int(settings.get("weekly_day", 0))))
+    except (TypeError, ValueError):
+        settings["weekly_day"] = NOTIFICATION_DEFAULTS.get("weekly_day", 0)
+    settings["summary_enabled"] = bool(settings.get("summary_enabled", True))
+    settings["overdue_enabled"] = bool(settings.get("overdue_enabled", True))
+    settings["badge_enabled"] = bool(settings.get("badge_enabled", True))
+    return settings
+
+
+def persist_notification_settings(username: str, new_settings: dict) -> None:
+    prefs_all = load_prefs()
+    current = prefs_all.get(username)
+    if not isinstance(current, dict):
+        current = {}
+    current["notifications"] = new_settings
+    prefs_all[username] = current
+    save_prefs(prefs_all)
+
 # ------------- Run -------------
 if __name__ == "__main__":
     app.run(debug=DEBUG)
+
+

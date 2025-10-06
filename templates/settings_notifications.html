@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Notification Settings{% endblock %}
+{% block content %}
+<div class="container">
+  <h1 class="mb-3">Notifications</h1>
+  <p class="text-muted mb-4">Choose how and when you receive reminders, summaries, and badge progress updates.</p>
+
+  <form class="card" method="post" action="{{ url_for('notifications_settings') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <h2>Delivery Channels</h2>
+    <div class="form-row">
+      <label>Email address</label>
+      <input type="email" name="email" placeholder="name@example.com" value="{{ contact_email }}">
+      <small class="hint">We send email notifications to this address.</small>
+    </div>
+    <div class="form-row">
+      <label>Discord webhook</label>
+      <input type="url" name="discord_webhook" placeholder="https://discord.com/api/webhooks/..." value="{{ discord_webhook }}">
+      <small class="hint">Optional: paste a Discord webhook URL to receive alerts in a channel.</small>
+    </div>
+    <div class="form-row checkbox-row">
+      {% for value, label in channel_choices %}
+        <label class="checkbox">
+          <input type="checkbox" name="channels" value="{{ value }}" {% if value in settings.channels %}checked{% endif %}>
+          <span>{{ label }}</span>
+        </label>
+      {% endfor %}
+      <small class="hint">Select one or more channels. We'll fall back to email if nothing is selected.</small>
+    </div>
+
+    <hr class="divider">
+
+    <h2>Schedule</h2>
+    <div class="grid-2">
+      <div class="form-row">
+        <label for="frequency">Reminder frequency</label>
+        <select id="frequency" name="frequency">
+          {% for value, label in frequency_choices %}
+            <option value="{{ value }}" {% if settings.frequency == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="daily_hour">Daily summary hour</label>
+        <input type="number" id="daily_hour" name="daily_hour" value="{{ settings.daily_hour }}" min="0" max="23">
+        <small class="hint">24-hour clock (e.g., 7 for 7 AM). Used for daily summaries.</small>
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="weekly_day">Weekly summary day</label>
+      <select id="weekly_day" name="weekly_day">
+        {% for code, label in weekday_choices %}
+          <option value="{{ code }}" {% if settings.weekly_day == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <small class="hint">Applies when frequency is set to weekly.</small>
+    </div>
+
+    <hr class="divider">
+
+    <h2>Notification Types</h2>
+    <div class="form-row checkbox-row">
+      <label class="checkbox">
+        <input type="checkbox" name="summary_enabled" value="1" {% if settings.summary_enabled %}checked{% endif %}>
+        <span>Daily "What's Due Today" summary</span>
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="overdue_enabled" value="1" {% if settings.overdue_enabled %}checked{% endif %}>
+        <span>Overdue task reminders</span>
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="badge_enabled" value="1" {% if settings.badge_enabled %}checked{% endif %}>
+        <span>Badge progress nudges</span>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="submit">Save Preferences</button>
+      <a class="button-secondary" href="{{ url_for('settings') }}">Back to Settings</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

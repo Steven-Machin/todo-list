@@ -32,3 +32,16 @@ Add feature list:
 - Group chats or "boards" for certain groups or titles
 - Turn off/on scheduling systems
 - Recurring tasks
+
+## Notifications
+The app now supports scheduled reminders and badge progress nudges via Celery.
+* Configure a Redis broker via `CELERY_BROKER_URL` (defaults to `redis://localhost:6379/0`).
+* Provide SMTP settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `NOTIFY_FROM_EMAIL`) for email delivery.
+* Optional: set `DISCORD_WEBHOOK_URL` or manage per-user Discord webhooks under Settings -> Notifications.
+
+Run the Flask server alongside a Celery worker and beat scheduler:
+```bash
+celery -A celery_app.celery_app worker --loglevel=info
+celery -A celery_app.celery_app beat --loglevel=info
+```
+Celery beat triggers overdue scans every 30 minutes and a daily summary job (hour configurable per user).
