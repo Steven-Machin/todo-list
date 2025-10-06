@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block head_extra %}
+  {{ super() }}
+  <style>
+    .profile-grid .card { border-radius: 1rem; }
+    .badge-tile { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .badge-tile:hover { transform: translateY(-4px); box-shadow: 0 0.75rem 1.5rem rgba(15, 23, 42, 0.08); }
+    .badge-tile.locked .badge-icon { filter: grayscale(100%); opacity: 0.45; }
+    .badge-tile.locked .card-body { opacity: 0.8; }
+    .badge-icon { width: 64px; height: 64px; object-fit: contain; }
+  </style>
+{% endblock %}
+{% block content %}
+<div class="container-xl py-4 profile-grid">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">{{ user.display_name or user.username|title }}</h1>
+      <p class="text-muted mb-0">Member since
+        {% if join_date %}
+          {{ join_date.strftime('%B %d, %Y') }}
+        {% else %}
+          —
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('task_manager') }}">Back to Tasks</a>
+      <a class="btn btn-primary" href="{{ url_for('my_badges') }}">Manage Badges</a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small mb-2">Total Tasks Completed</p>
+          <h2 class="display-6 fw-semibold mb-1">{{ total_completed }}</h2>
+          <p class="text-muted small mb-0">Keep knocking items off your list.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <p class="text-muted text-uppercase small mb-2">Current Streak</p>
+          <h2 class="display-6 fw-semibold mb-1">{{ current_streak }}</h2>
+          <p class="text-muted small mb-0">Longest streak: {{ longest_streak }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body d-flex flex-column">
+          <p class="text-muted text-uppercase small mb-2">Next Badge Progress</p>
+          {% if progress_info %}
+            <div class="d-flex align-items-center gap-3 mb-2">
+              {% if progress_info.badge.icon_path %}
+                <img src="{{ progress_info.badge.icon_path }}" alt="{{ progress_info.badge.name }} icon" class="badge-icon flex-shrink-0">
+              {% endif %}
+              <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="fw-semibold">{{ progress_info.badge.name }}</span>
+                  <span class="text-muted small">{{ progress_info.current }}/{{ progress_info.target }}</span>
+                </div>
+                <div class="progress" style="height: 0.75rem;">
+                  <div class="progress-bar" role="progressbar" style="width: {{ progress_info.percent }}%;" aria-valuenow="{{ progress_info.percent }}" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+              </div>
+            </div>
+            <p class="text-muted small mb-0">{{ progress_info.label }}{% if progress_info.remaining > 0 %} · {{ progress_info.remaining }} to go{% endif %}</p>
+          {% else %}
+            <p class="text-muted small mb-0">You have unlocked every badge currently available. ??</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <h2 class="h5 mb-0">Unlocked Badges</h2>
+      <span class="badge text-bg-success">{{ earned_badges|length }} earned</span>
+    </div>
+    {% if earned_badges %}
+      <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+        {% for badge in earned_badges %}
+          <div class="col">
+            <div class="card badge-tile shadow-sm border-0 h-100">
+              <div class="card-body text-center">
+                {% if badge.icon_path %}
+                  <img src="{{ badge.icon_path }}" alt="{{ badge.name }} icon" class="badge-icon mb-3">
+                {% endif %}
+                <h3 class="h6 mb-1">{{ badge.name }}</h3>
+                <p class="text-muted small mb-3">{{ badge.description }}</p>
+                {% if badge.earned_at %}
+                  <p class="text-muted small mb-0">Earned {{ badge.earned_at|format_datetime }}</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card border-0 shadow-sm">
+        <div class="card-body text-center text-muted">
+          <p class="mb-0">No badges yet — complete tasks to start collecting!</p>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="h6 text-uppercase text-muted mb-3">Locked Badges</h2>
+    {% if locked_badges %}
+      <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+        {% for badge in locked_badges %}
+          <div class="col">
+            <div class="card badge-tile locked shadow-sm h-100">
+              <div class="card-body text-center">
+                {% if badge.icon_path %}
+                  <img src="{{ badge.icon_path }}" alt="{{ badge.name }} icon" class="badge-icon mb-3">
+                {% endif %}
+                <h3 class="h6 mb-1">{{ badge.name }}</h3>
+                <p class="text-muted small mb-0">{{ badge.description }}</p>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card border-0 shadow-sm">
+        <div class="card-body text-center text-muted">
+          <p class="mb-0">All badges unlocked. Keep up the amazing streak!</p>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

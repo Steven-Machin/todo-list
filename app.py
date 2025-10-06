@@ -127,6 +127,9 @@ if DB_ENABLED:
         password_hash = Column(String(255))
         role = Column(String(20), default="member", nullable=False)
         titles = Column(JSON, default=list)
+        join_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+        total_tasks_completed = Column(Integer, default=0, nullable=False)
+        streak_count = Column(Integer, default=0, nullable=False)
         extra = Column(JSON)
 
         tasks_created = relationship("TaskModel", back_populates="owner", foreign_keys="TaskModel.owner_username")
@@ -225,6 +228,20 @@ DEFAULT_BADGES = [
 
 DEFAULT_BADGES_BY_SLUG = {badge["slug"]: badge for badge in DEFAULT_BADGES}
 
+
+
+
+BADGE_PROGRESS_ORDER = [
+    BADGE_SLUG_FIRST_STEP,
+    BADGE_SLUG_TASK_MASTER,
+    BADGE_SLUG_WEEKLY_WARRIOR,
+]
+
+BADGE_PROGRESS_RULES: Dict[str, Dict[str, Any]] = {
+    BADGE_SLUG_FIRST_STEP: {"metric": "completed_count", "target": 1, "label": "Complete 1 task"},
+    BADGE_SLUG_TASK_MASTER: {"metric": "completed_count", "target": 100, "label": "Complete 100 tasks"},
+    BADGE_SLUG_WEEKLY_WARRIOR: {"metric": "longest_streak", "target": 7, "label": "Achieve a 7-day streak"},
+}
 
 
 
@@ -608,15 +625,20 @@ def store_user_badge(username: str, badge_slug: str) -> Optional[Dict[str, Any]]
     return badge_dict
 
 
-def award_badges_for_user(username: str, tasks: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-    bootstrap_badges()
+def get_user_completion_stats(username: str, tasks: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     uname = _norm(username)
     if not uname:
-        return []
-    if tasks is None:
-        tasks = load_tasks()
-    completed_tasks = []
-    for task in tasks:
+        return {
+            "completed_tasks": [],
+            "completed_count": 0,
+            "completion_dates": [],
+            "unique_dates": [],
+            "longest_streak": 0,
+            "current_streak": 0,
+        }
+    task_list = tasks if tasks is not None else load_tasks()
+    completed_tasks: List[Dict[str, Any]] = []
+    for task in task_list:
         if not isinstance(task, dict) or not task.get("done"):
             continue
         completed_by = _norm(task.get("completed_by"))
@@ -626,27 +648,117 @@ def award_badges_for_user(username: str, tasks: Optional[List[Dict[str, Any]]] =
             continue
         completed_tasks.append(task)
 
-    completed_count = len(completed_tasks)
-    completion_dates = []
+    completion_dates: List[date] = []
     for task in completed_tasks:
         stamp = task.get("completed_at")
         dt = parse_dt_any(stamp) if stamp else None
         if dt:
             completion_dates.append(dt.date())
-    unique_dates = sorted(set(completion_dates))
 
-    def has_streak(dates: List[date], length: int) -> bool:
-        if len(dates) < length:
-            return False
-        streak = 1
-        for idx in range(1, len(dates)):
-            if (dates[idx] - dates[idx - 1]).days == 1:
-                streak += 1
-                if streak >= length:
-                    return True
-            else:
-                streak = 1
-        return False
+    unique_dates = sorted(set(completion_dates))
+    longest_streak = 0
+    streak = 0
+    prev_date: Optional[date] = None
+    for current_date in unique_dates:
+        if prev_date and (current_date - prev_date).days == 1:
+            streak += 1
+        else:
+            streak = 1
+        if streak > longest_streak:
+            longest_streak = streak
+        prev_date = current_date
+
+    current_streak = 0
+    if unique_dates:
+        completion_set = set(unique_dates)
+        cursor = date.today()
+        while cursor in completion_set:
+            current_streak += 1
+            cursor -= timedelta(days=1)
+
+    return {
+        "completed_tasks": completed_tasks,
+        "completed_count": len(completed_tasks),
+        "completion_dates": completion_dates,
+        "unique_dates": unique_dates,
+        "longest_streak": longest_streak,
+        "current_streak": current_streak,
+    }
+
+
+
+def get_next_badge_progress(stats: Dict[str, Any], earned_slugs: set[str], badge_catalog: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    for slug in BADGE_PROGRESS_ORDER:
+        if slug in earned_slugs:
+            continue
+        badge = badge_catalog.get(slug)
+        rule = BADGE_PROGRESS_RULES.get(slug)
+        if not badge or not rule:
+            continue
+        metric_value = int(stats.get(rule["metric"], 0) or 0)
+        target = int(rule.get("target", 0) or 0)
+        if target <= 0:
+            percent = 100
+            remaining = 0
+        else:
+            percent = min(100, int(round((metric_value / target) * 100)))
+            remaining = max(target - metric_value, 0)
+        return {
+            "slug": slug,
+            "badge": dict(badge),
+            "current": metric_value,
+            "target": target,
+            "percent": percent,
+            "remaining": remaining,
+            "label": rule.get("label"),
+            "metric": rule.get("metric"),
+        }
+    return None
+
+
+
+def update_user_progress_fields(username: str, total_completed: int, streak: int) -> None:
+    uname = _norm(username)
+    if not uname:
+        return
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal.begin() as session:
+            record = session.get(UserModel, uname)
+            if record:
+                record.total_tasks_completed = total_completed
+                record.streak_count = streak
+                if not record.join_date:
+                    record.join_date = datetime.utcnow()
+    else:
+        users = load_users()
+        changed = False
+        for user in users:
+            if _norm(user.get("username")) != uname:
+                continue
+            if user.get("total_tasks_completed") != total_completed:
+                user["total_tasks_completed"] = total_completed
+                changed = True
+            if user.get("streak_count") != streak:
+                user["streak_count"] = streak
+                changed = True
+            if not user.get("join_date"):
+                user["join_date"] = datetime.utcnow().isoformat(timespec="seconds")
+                changed = True
+            break
+        if changed:
+            save_users(users)
+
+
+
+def award_badges_for_user(username: str, tasks: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    bootstrap_badges()
+    uname = _norm(username)
+    if not uname:
+        return []
+    task_list = tasks if tasks is not None else load_tasks()
+    stats = get_user_completion_stats(uname, task_list)
+    completed_count = stats.get("completed_count", 0)
+    longest_streak = stats.get("longest_streak", 0)
 
     earned_slugs = {badge.get("slug") for badge in get_user_badges(uname)}
     targets: List[str] = []
@@ -654,7 +766,7 @@ def award_badges_for_user(username: str, tasks: Optional[List[Dict[str, Any]]] =
         targets.append(BADGE_SLUG_FIRST_STEP)
     if BADGE_SLUG_TASK_MASTER not in earned_slugs and completed_count >= 100:
         targets.append(BADGE_SLUG_TASK_MASTER)
-    if BADGE_SLUG_WEEKLY_WARRIOR not in earned_slugs and has_streak(unique_dates, 7):
+    if BADGE_SLUG_WEEKLY_WARRIOR not in earned_slugs and longest_streak >= 7:
         targets.append(BADGE_SLUG_WEEKLY_WARRIOR)
 
     newly_awarded = []
@@ -786,7 +898,7 @@ TASK_PERSISTED_KEYS = {
     "completed_by",
 }
 
-USER_PERSISTED_KEYS = {"username", "display_name", "password", "role", "titles"}
+USER_PERSISTED_KEYS = {"username", "display_name", "password", "role", "titles", "join_date", "total_tasks_completed", "streak_count"}
 
 
 def _optional_username(value: Optional[str]) -> Optional[str]:
@@ -802,6 +914,10 @@ def _user_to_dict(model: "UserModel") -> Dict[str, Any]:
         "role": (model.role or "member"),
         "titles": list(model.titles or []),
     }
+    if model.join_date:
+        data["join_date"] = iso_minutes(model.join_date)
+    data["total_tasks_completed"] = int(model.total_tasks_completed or 0)
+    data["streak_count"] = int(model.streak_count or 0)
     if model.extra:
         for key, value in model.extra.items():
             data.setdefault(key, value)
@@ -961,6 +1077,20 @@ def save_users(users: List[Dict[str, Any]]):
             titles = list(data.get("titles") or [])
             role = (data.get("role") or "member").lower()
             extra = {k: v for k, v in data.items() if k not in USER_PERSISTED_KEYS}
+            join_raw = data.get("join_date")
+            if isinstance(join_raw, datetime):
+                join_date = join_raw
+            elif isinstance(join_raw, date):
+                join_date = datetime.combine(join_raw, datetime.min.time())
+            elif join_raw:
+                parsed_join = parse_dt_any(str(join_raw))
+                join_date = parsed_join if parsed_join else None
+            else:
+                join_date = None
+            if not join_date:
+                join_date = datetime.utcnow()
+            total_completed = int(data.get("total_tasks_completed") or 0)
+            streak_value = int(data.get("streak_count") or 0)
 
             record = existing.pop(uname, None)
             if record:
@@ -968,6 +1098,9 @@ def save_users(users: List[Dict[str, Any]]):
                 record.password_hash = data.get("password")
                 record.role = role
                 record.titles = titles
+                record.join_date = join_date
+                record.total_tasks_completed = total_completed
+                record.streak_count = streak_value
                 record.extra = extra or None
             else:
                 session.add(
@@ -977,6 +1110,9 @@ def save_users(users: List[Dict[str, Any]]):
                         password_hash=data.get("password"),
                         role=role,
                         titles=titles,
+                        join_date=join_date,
+                        total_tasks_completed=total_completed,
+                        streak_count=streak_value,
                         extra=extra or None,
                     )
                 )
@@ -1197,7 +1333,10 @@ def signup():
             "display_name": raw.title(),
             "password": generate_password_hash(request.form["password"]),
             "role": "member",
-            "titles": []
+            "titles": [],
+            "join_date": datetime.utcnow().isoformat(timespec="seconds"),
+            "total_tasks_completed": 0,
+            "streak_count": 0
         })
         save_users(users)
         flash("Account created; please log in.")
@@ -2001,6 +2140,61 @@ def settings_update():
     return redirect(url_for("settings"))
 
 # ------------------------------- Badges -------------------------------
+
+
+@app.route("/profile")
+@login_required
+def profile():
+    username = require_username()
+    user_record = find_user_record(username)
+    if not user_record:
+        abort(404)
+
+    raw_join = user_record.get("join_date")
+    join_dt: datetime | None = None
+    if isinstance(raw_join, datetime):
+        join_dt = raw_join
+    elif isinstance(raw_join, date):
+        join_dt = datetime.combine(raw_join, datetime.min.time())
+    elif raw_join:
+        join_dt = parse_dt_any(str(raw_join))
+    if not join_dt:
+        join_dt = datetime.utcnow()
+        user_record["join_date"] = join_dt.isoformat(timespec="seconds")
+    join_date_display = join_dt.date()
+
+    tasks = load_tasks()
+    stats = get_user_completion_stats(username, tasks)
+    total_completed = stats.get("completed_count", 0)
+    current_streak = stats.get("current_streak", 0)
+    longest_streak = stats.get("longest_streak", 0)
+    user_record["total_tasks_completed"] = total_completed
+    user_record["streak_count"] = current_streak
+
+    earned_badges = get_user_badges(username)
+    badge_catalog = get_badge_catalog()
+    earned_slugs = {badge.get("slug") for badge in earned_badges}
+    locked_badges = [dict(badge_catalog[slug]) for slug in badge_catalog if slug not in earned_slugs]
+    locked_badges.sort(key=lambda badge: (badge.get("name") or "").lower())
+
+    progress_info = get_next_badge_progress(stats, earned_slugs, badge_catalog)
+
+    update_user_progress_fields(username, total_completed, current_streak)
+
+    return render_template(
+        "profile.html",
+        user=user_record,
+        join_date=join_date_display,
+        stats=stats,
+        total_completed=total_completed,
+        current_streak=current_streak,
+        longest_streak=longest_streak,
+        progress_info=progress_info,
+        earned_badges=earned_badges,
+        locked_badges=locked_badges,
+    )
+
+
 @app.route("/badges", endpoint="my_badges")
 @login_required
 def my_badges():
