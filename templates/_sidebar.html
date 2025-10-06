@@ -1,13 +1,61 @@
-<nav class="sidebar">
-  <div class="menu-title">Menu</div>
-  <ul>
-    {% for item in nav_items %}
-      <li class="{{ 'active' if is_active(item.endpoint) else '' }}">
-        <a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
-      </li>
-    {% endfor %}
-    <li class="logout">
-      <a href="{{ url_for('logout') }}" onclick="return confirm('Are you sure you want to log out?')">Logout</a>
-    </li>
-  </ul>
+{% set primary_links = nav_items | selectattr('group', 'equalto', 'primary') | list %}
+{% set secondary_links = nav_items | selectattr('group', 'equalto', 'secondary') | list %}
+{% set management_links = nav_items | selectattr('group', 'equalto', 'management') | list %}
+
+{% macro render_link(item, extra_active=None) %}
+  {% set active_targets = extra_active or item.get('active_endpoints') or [item.endpoint] %}
+  {% set is_current = false %}
+  {% for target in active_targets %}
+    {% if is_active(target) %}
+      {% set is_current = true %}
+    {% endif %}
+  {% endfor %}
+  <li class="sidebar-item{% if is_current %} active{% endif %}">
+    <a class="sidebar-link" href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
+  </li>
+{% endmacro %}
+
+<nav id="sidebarNav" class="sidebar" aria-label="App navigation">
+  <div class="sidebar-inner">
+    <div class="sidebar-header">
+      <span class="sidebar-heading">Menu</span>
+      <button class="sidebar-close" type="button" aria-label="Hide navigation" data-sidebar-toggle>
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </div>
+
+    {% if primary_links %}
+      <div class="sidebar-section" role="navigation">
+        <span class="sidebar-section-title">Navigate</span>
+        <ul class="sidebar-links">
+          {% for item in primary_links %}
+            {% set extra = ['shifts', 'my_shifts'] if item.label == 'Shifts' else None %}
+            {{ render_link(item, extra) }}
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if secondary_links %}
+      <div class="sidebar-section" role="navigation">
+        <span class="sidebar-section-title">Quick Access</span>
+        <ul class="sidebar-links">
+          {% for item in secondary_links %}
+            {{ render_link(item) }}
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if management_links %}
+      <div class="sidebar-section" role="navigation">
+        <span class="sidebar-section-title">Management</span>
+        <ul class="sidebar-links">
+          {% for item in management_links %}
+            {{ render_link(item) }}
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
 </nav>

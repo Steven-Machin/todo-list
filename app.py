@@ -193,19 +193,21 @@ else:
     SessionLocal = None
 
 NAV_ITEMS = [
-    {"label": "Home", "endpoint": "dashboard", "roles": ["member", "manager"], "icon": None},
-    {"label": "Calendar", "endpoint": "calendar", "roles": ["member", "manager"], "icon": None},
-    {"label": "Overdue", "endpoint": "overdue", "roles": ["member", "manager"], "icon": None},
-    {"label": "My Chats", "endpoint": "my_chats", "roles": ["member", "manager"], "icon": None},
-    {"label": "My Shifts", "endpoint": "my_shifts", "roles": ["member", "manager"], "icon": None},
-    {"label": "Settings", "endpoint": "settings", "roles": ["member", "manager"], "icon": None},
-    {"label": "My Badges", "endpoint": "my_badges", "roles": ["member", "manager"], "icon": None},
+    {"label": "Dashboard", "endpoint": "dashboard", "roles": ["member", "manager"], "group": "primary"},
+    {"label": "Calendar", "endpoint": "calendar", "roles": ["member", "manager"], "group": "primary"},
+    {"label": "Profile", "endpoint": "profile", "roles": ["member", "manager"], "group": "primary"},
+    {"label": "Shifts", "endpoint": "my_shifts", "roles": ["member"], "group": "primary"},
+    {"label": "Shifts", "endpoint": "shifts", "roles": ["manager"], "group": "primary"},
+    {"label": "Settings", "endpoint": "settings", "roles": ["member", "manager"], "group": "primary"},
 
-    {"label": "Task Manager", "endpoint": "task_manager", "roles": ["manager"], "icon": None},
-    {"label": "Team Member Manager", "endpoint": "team_manager", "roles": ["manager"], "icon": None},
-    {"label": "Group Chat Manager", "endpoint": "group_chat_manager", "roles": ["manager"], "icon": None},
-    {"label": "Title Manager", "endpoint": "title_manager", "roles": ["manager"], "icon": None},
-    {"label": "Shifts", "endpoint": "shifts", "roles": ["manager"], "icon": None},
+    {"label": "Overdue", "endpoint": "overdue", "roles": ["member", "manager"], "group": "secondary"},
+    {"label": "My Chats", "endpoint": "my_chats", "roles": ["member", "manager"], "group": "secondary"},
+    {"label": "My Badges", "endpoint": "my_badges", "roles": ["member", "manager"], "group": "secondary"},
+
+    {"label": "Task Manager", "endpoint": "task_manager", "roles": ["manager"], "group": "management"},
+    {"label": "Team Member Manager", "endpoint": "team_manager", "roles": ["manager"], "group": "management"},
+    {"label": "Group Chat Manager", "endpoint": "group_chat_manager", "roles": ["manager"], "group": "management"},
+    {"label": "Title Manager", "endpoint": "title_manager", "roles": ["manager"], "group": "management"},
 ]
 
 BADGE_SLUG_FIRST_STEP = "first_step"
@@ -3020,6 +3022,4 @@ def generate_assistant_reply(username: str, prompt: str) -> str:
 # ------------- Run -------------
 if __name__ == "__main__":
     app.run(debug=DEBUG)
-
-
 
