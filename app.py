@@ -386,7 +386,7 @@ def manager_required(f):
         if not current_user.is_authenticated:
             return login_manager.unauthorized()
         if getattr(current_user, "role", "member") != "manager":
-            flash("Managers only.")
+            flash("Managers only.", "warning")
             return redirect(url_for("index"))
         return f(*args, **kwargs)
     return wrapper
@@ -1854,7 +1854,7 @@ def signup():
         uname = raw.lower()
         users = load_users()
         if any(u["username"] == uname for u in users):
-            flash("Username already exists.")
+            flash("Username already exists.", "warning")
             return redirect(url_for("signup"))
         users.append({
             "username": uname,
@@ -1867,7 +1867,7 @@ def signup():
             "streak_count": 0
         })
         save_users(users)
-        flash("Account created; please log in.")
+        flash("Account created; please log in.", "success")
         return redirect(url_for("login"))
     return render_template("signup.html")
 
@@ -1879,9 +1879,9 @@ def login():
         record = find_user_record(uname)
         if record and check_password_hash(record["password"], pwd):
             login_user(AppUser.from_record(record))
-            flash("Logged in.")
+            flash("Logged in.", "success")
             return redirect(url_for("index"))
-        flash("Invalid credentials.")
+        flash("Invalid credentials.", "danger")
     return render_template("login.html")
 
 @app.route("/logout")
@@ -1890,7 +1890,7 @@ def logout():
     # The "Are you sure?" confirmation is implemented in templates via onclick confirm()
     logout_user()
     session.clear()
-    flash("You have been logged out.")
+    flash("You have been logged out.", "info")
     return redirect(url_for("login"))
 
 # ------------------------------- Forgot / Reset Password ---------------------
@@ -1900,7 +1900,7 @@ def reset_password_request():
     if request.method == "POST":
         email_raw = request.form.get("email", "").strip()
         if not email_raw:
-            flash("Please provide the email address associated with your account.")
+            flash("Please provide the email address associated with your account.", "warning")
             return render_template("reset_password_request.html")
 
         email_lookup = email_raw.lower()
@@ -1924,7 +1924,7 @@ def reset_password_request():
             reset_url = url_for("reset_password", token=token, _external=True)
             email_sent = dispatch_password_reset_email(target_user["username"], target_user.get("email"), reset_url)
 
-        flash("If an account with that email exists, we sent password reset instructions.")
+        flash("If an account with that email exists, we sent password reset instructions.", "info")
         preview_link = reset_url if (reset_url and not email_sent) else None
         return render_template("reset_password_sent.html", preview_link=preview_link, email_sent=email_sent)
 
@@ -1937,7 +1937,7 @@ def reset_password(token):
     resets = load_resets()
     record = resets.get(token)
     if not record:
-        flash("Invalid or expired reset link.")
+        flash("Invalid or expired reset link.", "danger")
         return redirect(url_for("login"))
 
     try:
@@ -1945,7 +1945,7 @@ def reset_password(token):
         if datetime.now() > expires_at:
             resets.pop(token, None)
             save_resets(resets)
-            flash("Reset link has expired.")
+            flash("Reset link has expired.", "warning")
             return redirect(url_for("reset_password_request"))
     except Exception:
         pass
@@ -1954,10 +1954,10 @@ def reset_password(token):
         pw1 = request.form.get("password", "")
         pw2 = request.form.get("password2", "")
         if len(pw1) < 6:
-            flash("Password must be at least 6 characters long.")
+            flash("Password must be at least 6 characters long.", "warning")
             return render_template("reset_password.html", token=token)
         if pw1 != pw2:
-            flash("Passwords must match.")
+            flash("Passwords must match.", "warning")
             return render_template("reset_password.html", token=token)
 
         users = load_users()
@@ -1971,7 +1971,7 @@ def reset_password(token):
         resets.pop(token, None)
         save_resets(resets)
 
-        flash("Password updated. Please log in.")
+        flash("Password updated. Please log in.", "success")
         return redirect(url_for("login"))
 
     return render_template("reset_password.html", token=token)
@@ -2067,7 +2067,7 @@ def reminders_add():
     text = request.form.get("text","").strip()
     due  = request.form.get("due_at","").strip()
     if not text:
-        flash("Reminder text required.")
+        flash("Reminder text required.", "warning")
         return redirect(url_for("index"))
     items = load_reminders()
     username = require_username()
@@ -2079,7 +2079,7 @@ def reminders_add():
         "done": False
     })
     save_reminders(items)
-    flash("Reminder added.")
+    flash("Reminder added.", "success")
     return redirect(url_for("index"))
 
 @app.route("/reminders/<rid>/delete", methods=["POST"], endpoint="reminders_delete")
@@ -2090,7 +2090,7 @@ def reminders_delete(rid):
     username = require_username()
     items = [r for r in items if not (r.get("id")==rid and r.get("user")==username)]
     save_reminders(items)
-    flash("Reminder deleted.")
+    flash("Reminder deleted.", "info")
     return redirect(url_for("index"))
 
 @app.route("/reminders/<rid>/toggle", methods=["POST"])
@@ -2213,7 +2213,7 @@ def api_task_search():
 def add():
     text = request.form.get("task","").strip()
     if not text:
-        flash("Task text required.")
+        flash("Task text required.", "warning")
         return redirect(url_for("tasks_page" if current_role()=="manager" else "index"))
 
     priority = request.form.get("priority","Medium")
@@ -2254,7 +2254,7 @@ def add():
     ts = load_tasks()
     ts.append(new)
     save_tasks(ts)
-    flash("Task added.")
+    flash("Task added.", "success")
     return redirect(url_for("tasks_page" if current_role()=="manager" else "index"))
 
 @app.route("/toggle/<int:task_id>", methods=["POST"])
@@ -2295,10 +2295,10 @@ def toggle(task_id):
     for badge in newly_awarded:
         description = badge.get("description") or ""
         if description:
-            flash(f"Badge unlocked: {badge.get('name')} - {description}")
+            flash(f"Badge unlocked: {badge.get('name')} - {description}", "success")
         else:
-            flash(f"Badge unlocked: {badge.get('name')}")
-    flash("Task status updated.")
+            flash(f"Badge unlocked: {badge.get('name')}", "success")
+    flash("Task status updated.", "success")
     return redirect(url_for("tasks_page" if role == "manager" else "index"))
 
 @app.route("/remove/<int:task_id>")
@@ -2313,9 +2313,9 @@ def remove(task_id):
         if role=="manager" or task_visible_to(t, username, users):
             ts.pop(task_id)
             save_tasks(ts)
-            flash("Task removed.")
+            flash("Task removed.", "info")
         else:
-            flash("Not authorized to remove this task.")
+            flash("Not authorized to remove this task.", "danger")
     return redirect(url_for("tasks_page" if role=="manager" else "index"))
 
 @app.route("/edit/<int:task_id>", methods=["GET","POST"])
@@ -2352,7 +2352,7 @@ def edit(task_id):
                 t["tags"] = normalize_tags(request.form.get("tags"))
                 t["recurring"] = normalize_recurring(request.form.get("recurring"))
                 save_tasks(ts)
-                flash("Task updated.")
+                flash("Task updated.", "success")
         return redirect(url_for("tasks_page" if role=="manager" else "index"))
     else:
         if 0<=task_id<len(ts):
@@ -2483,6 +2483,7 @@ def create_task_page():
         for u in users
         if u["role"]!="manager" and any(t.lower() in elig for t in u.get("titles",[]))
     ]
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Tasks", url_for("tasks_page")), ("Create Task", None))
     return render_template("create_task.html", assignable_users=assignable, all_tags=sorted({tag for task in load_tasks() for tag in normalize_tags(task.get("tags"))}))
 
 # ------------------------------- Shifts -------------------------------
@@ -2509,9 +2510,9 @@ def view_shifts():
                 request.form.get("notes", ""),
             )
         except ValueError as exc:
-            flash(str(exc))
+            flash(str(exc), "danger")
         else:
-            flash("Shift scheduled.")
+            flash("Shift scheduled.", "success")
             return redirect(url_for("shifts"))
     else:
         form_defaults = {
@@ -2545,11 +2546,11 @@ def edit_shift(shift_id: str):
             request.form.get("notes", ""),
         )
     except ValueError as exc:
-        flash(str(exc))
+        flash(str(exc), "danger")
     except ShiftNotFoundError:
         abort(404)
     else:
-        flash("Shift updated.")
+        flash("Shift updated.", "success")
     return redirect(url_for("shifts"))
 
 
@@ -2563,7 +2564,7 @@ def delete_shift(shift_id: str):
     except ShiftNotFoundError:
         abort(404)
     else:
-        flash("Shift removed.")
+        flash("Shift removed.", "info")
     return redirect(url_for("shifts"))
 
 
@@ -2576,18 +2577,18 @@ def record_shift_attendance(shift_id: str):
     try:
         update_shift_attendance(username, shift_id, status)
     except ValueError as exc:
-        flash(str(exc))
+        flash(str(exc), "danger")
     except ShiftNotFoundError:
         abort(404)
     else:
         if status == "clear":
-            flash("Attendance reset.")
+            flash("Attendance reset.", "info")
         elif status == "attended":
-            flash("Shift marked as attended.")
+            flash("Shift marked as attended.", "success")
         elif status == "missed":
-            flash("Shift marked as missed.")
+            flash("Shift marked as missed.", "warning")
         else:
-            flash("Attendance updated.")
+            flash("Attendance updated.", "info")
     return redirect(url_for("shifts"))
 
 
@@ -2619,7 +2620,7 @@ def title_manager():
         if nt and nt not in titles:
             titles.append(nt)
             save_titles(titles)
-            flash(f"Title '{nt}' added.")
+            flash(f"Title '{nt}' added.", "success")
 
     categorized = {"Untitled":[]}
     for u in users:
@@ -2653,7 +2654,7 @@ def update_titles():
             u["titles"] = [t for t in u.get("titles",[]) if t!=rem]
 
     save_users(users)
-    flash("Titles updated.")
+    flash("Titles updated.", "success")
     return redirect(url_for("title_manager"))
 
 # ------------------------------- Calendar -------------------------------
@@ -2924,7 +2925,7 @@ def settings_update():
                 break
         save_users(users)
 
-    flash("Settings saved.")
+    flash("Settings saved.", "success")
     return redirect(url_for("settings"))
 
 @app.route("/settings/notifications", methods=["GET", "POST"])
@@ -2932,6 +2933,7 @@ def settings_update():
 @demo_guard
 def notifications_settings():
     username = require_username()
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Settings", url_for("settings")), ("Notifications", None))
     notif_settings = load_notification_settings_for(username)
 
     frequency_choices = [("daily", "Daily"), ("weekly", "Weekly"), ("off", "Off")]
@@ -2983,7 +2985,7 @@ def notifications_settings():
             save_users(users)
             break
 
-        flash("Notification preferences updated.")
+        flash("Notification preferences updated.", "success")
         return redirect(url_for("notifications_settings"))
 
     return render_template(
@@ -3009,7 +3011,7 @@ def assistant_view():
     if request.method == "POST":
         prompt = (request.form.get("prompt") or "").strip()
         if not prompt:
-            flash("Ask me something to get started!")
+            flash("Ask me something to get started!", "info")
             return redirect(url_for("assistant"))
 
         timestamp = datetime.utcnow().isoformat(timespec="seconds")
@@ -3116,6 +3118,7 @@ def profile():
 @login_required
 def my_badges():
     username = require_username()
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Profile", url_for("profile")), ("Badges", None))
     earned = get_user_badges(username)
     catalog = get_badge_catalog()
     earned_slugs = {badge.get("slug") for badge in earned}
@@ -3131,6 +3134,7 @@ def overdue_tasks():
     username = require_username()
     role = current_role()
     today = date.today()
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Overdue Tasks", None))
 
     users = load_users()
     tasks = load_tasks()
@@ -3170,20 +3174,21 @@ def group_chat_manager():
     groups = load_groups()
     users  = load_users()
     supervisors = [u for u in users if any(t.lower()=="supervisor" for t in u.get("titles",[]))]
+    set_breadcrumbs(("Home", url_for("dashboard")), ("My Chats", None))
 
     if request.method == "POST":
         name = (request.form.get("group_name") or "").strip()
         supervisor = (request.form.get("supervisor") or "").strip().lower()
 
         if not name or not supervisor:
-            flash("Group name and supervisor are required.")
+            flash("Group name and supervisor are required.", "warning")
         else:
             user_lookup = {u["username"].lower(): u for u in users}
             supervisor_user = user_lookup.get(supervisor)
             if supervisor_user is None:
-                flash("Selected supervisor no longer exists.")
+                flash("Selected supervisor no longer exists.", "danger")
             elif any((g.get("name") or "").strip().lower() == name.lower() for g in groups):
-                flash("A group with that name already exists.")
+                flash("A group with that name already exists.", "warning")
             else:
                 new_group = {
                     "id": str(uuid.uuid4()),
@@ -3193,7 +3198,7 @@ def group_chat_manager():
                 }
                 groups.append(new_group)
                 save_groups(groups)
-                flash("Group created.")
+                flash("Group created.", "success")
                 return redirect(url_for("group_chat_manager"))
 
     return render_template("group_chat_manager.html",
@@ -3233,6 +3238,7 @@ def chats():
     def _ts(c): return c["last"]["timestamp"] if c["last"] else ""
     cards.sort(key=lambda c: (_ts(c), c["unread"]), reverse=True)
 
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Group Chats", None))
     return render_template("my_chats.html", cards=cards)
 
 @app.route("/groups/<group_id>")
@@ -3249,6 +3255,14 @@ def view_group(group_id):
     tasks    = load_group_tasks().get(group_id,[])
     messages = load_group_messages().get(group_id,[])
     users    = load_users()
+
+    parent_endpoint = "group_chat_manager" if role == "manager" else "my_chats"
+    parent_label = "Group Chats" if role == "manager" else "My Chats"
+    set_breadcrumbs(
+        ("Home", url_for("dashboard")),
+        (parent_label, url_for(parent_endpoint)),
+        (grp.get("name") or "Group", None),
+    )
 
     # mark read
     seen_map = load_group_seen()
@@ -3297,11 +3311,11 @@ def post_group_message(group_id):
     role = current_role()
     group = next((g for g in load_groups() if g["id"] == group_id), None)
     if not group or (role != "manager" and user not in group.get("members", [])):
-        flash("Not authorized.")
+        flash("Not authorized.", "danger")
         return redirect(url_for("group_chat_manager"))
 
     if not text and not (img and img.filename):
-        flash("Type a message or attach an image.")
+        flash("Type a message or attach an image.", "warning")
         return redirect(url_for("view_group", group_id=group_id))
 
     image_filename = None
@@ -3339,7 +3353,7 @@ def pin_message(group_id, idx):
     if not grp:
         abort(404)
     if not (role=="manager" or user==grp.get("supervisor")):
-        flash("Not authorized to pin.")
+        flash("Not authorized to pin.", "danger")
         return redirect(url_for("view_group", group_id=group_id))
 
     msgs = load_group_messages()
@@ -3347,7 +3361,7 @@ def pin_message(group_id, idx):
     if 0 <= idx < len(lst):
         lst[idx]["pinned"] = not lst[idx].get("pinned", False)
         save_group_messages(msgs)
-        flash("Pinned" if lst[idx]["pinned"] else "Unpinned")
+        flash("Pinned" if lst[idx]["pinned"] else "Unpinned", "info")
     return redirect(url_for("view_group", group_id=group_id))
 
 @app.route("/groups/<group_id>/delete/<int:idx>", methods=["POST"])
@@ -3367,11 +3381,11 @@ def delete_message(group_id, idx):
     if 0 <= idx < len(lst):
         can_delete = (role == "manager") or (user == lst[idx]["sender"])
         if not can_delete:
-            flash("You can only delete your messages.")
+            flash("You can only delete your messages.", "danger")
             return redirect(url_for("view_group", group_id=group_id))
         lst.pop(idx)
         save_group_messages(msgs)
-        flash("Message deleted.")
+        flash("Message deleted.", "info")
     return redirect(url_for("view_group", group_id=group_id))
 
 @app.route("/groups/<group_id>/add_member", methods=["POST"])
@@ -3385,7 +3399,7 @@ def add_group_member(group_id):
         if u and u not in grp["members"]:
             grp["members"].append(u)
             save_groups(gs)
-            flash("Member added.")
+            flash("Member added.", "success")
     return redirect(url_for("view_group",group_id=group_id))
 
 @app.route("/groups/<group_id>/remove_member", methods=["POST"])
@@ -3399,7 +3413,7 @@ def remove_group_member(group_id):
         if u in grp["members"] and u!=grp["supervisor"]:
             grp["members"].remove(u)
             save_groups(gs)
-            flash("Member removed.")
+            flash("Member removed.", "info")
     return redirect(url_for("view_group",group_id=group_id))
 
 @app.route("/groups/<group_id>/add_task", methods=["POST"])
@@ -3410,7 +3424,7 @@ def add_group_task(group_id):
     priority = request.form.get("priority","Medium")
     notes    = request.form.get("notes","").strip()
     if not text:
-        flash("Task text required.")
+        flash("Task text required.", "warning")
         return redirect(url_for("view_group",group_id=group_id))
 
     # members or managers only
@@ -3418,7 +3432,7 @@ def add_group_task(group_id):
     role = current_role()
     grp  = next((g for g in load_groups() if g["id"]==group_id), None)
     if not grp or (role!="manager" and user not in grp.get("members",[])):
-        flash("Not authorized.")
+        flash("Not authorized.", "danger")
         return redirect(url_for("group_chat_manager"))
 
     gts = load_group_tasks()
@@ -3433,7 +3447,7 @@ def add_group_task(group_id):
         "created_at": datetime.now().isoformat(timespec="minutes")
     })
     save_group_tasks(gts)
-    flash("Task added.")
+    flash("Task added.", "success")
     return redirect(url_for("view_group",group_id=group_id))
 
 @app.route("/groups/<group_id>/toggle_task/<int:idx>", methods=["POST"])
@@ -3444,7 +3458,7 @@ def toggle_group_task(group_id, idx):
     gs   = load_groups()
     grp  = next((g for g in gs if g["id"]==group_id), None)
     if not grp or user not in grp.get("members",[]):
-        flash("Not authorized.")
+        flash("Not authorized.", "danger")
         return redirect(url_for("view_group",group_id=group_id))
 
     gts = load_group_tasks()
@@ -3476,7 +3490,7 @@ def toggle_group_task(group_id, idx):
             for k in ("completed_at","completed_by","photo"):
                 t.pop(k,None)
     save_group_tasks(gts)
-    flash("Status updated.")
+    flash("Status updated.", "success")
     return redirect(url_for("view_group",group_id=group_id))
 
 LEGACY_ENDPOINT_ALIASES = [
