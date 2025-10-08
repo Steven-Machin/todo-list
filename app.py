@@ -5,7 +5,7 @@ from flask import (
 )
 import calendar
 import json, os, uuid, secrets, contextlib, tempfile
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time as dtime
 from functools import wraps, lru_cache
 from flask_login import (
     LoginManager,
@@ -117,6 +117,7 @@ DB_ENABLED = bool(USE_DATABASE and DATABASE_URL)
 SessionLocal: Optional[sessionmaker] | None = None
 UserModel = None
 TaskModel = None
+ShiftModel = None
 Base = None
 
 if DB_ENABLED:
@@ -145,6 +146,7 @@ if DB_ENABLED:
         tasks_created = relationship("TaskModel", back_populates="owner", foreign_keys="TaskModel.owner_username")
         tasks_assigned = relationship("TaskModel", back_populates="assignee", foreign_keys="TaskModel.assigned_username")
         badge_links = relationship("UserBadgeModel", back_populates="user", cascade="all, delete-orphan")
+        shifts = relationship("ShiftModel", back_populates="user", cascade="all, delete-orphan")
 
     class TaskModel(Base):
         __tablename__ = "tasks"
@@ -168,6 +170,19 @@ if DB_ENABLED:
         assignee = relationship("UserModel", foreign_keys=[assigned_username], back_populates="tasks_assigned")
         owner = relationship("UserModel", foreign_keys=[owner_username], back_populates="tasks_created")
         completed_by = relationship("UserModel", foreign_keys=[completed_by_username])
+
+    class ShiftModel(Base):
+        __tablename__ = "shifts"
+        id = Column(Integer, primary_key=True)
+        username = Column(String(80), ForeignKey("users.username", ondelete="CASCADE"), nullable=False)
+        date = Column(Date, nullable=False)
+        start_time = Column(String(16), nullable=False)
+        end_time = Column(String(16), nullable=False)
+        notes = Column(Text)
+        created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+        user = relationship("UserModel", back_populates="shifts")
 
     class BadgeModel(Base):
         __tablename__ = "badges"
@@ -199,8 +214,7 @@ NAV_ITEMS = [
     {"label": "Dashboard", "endpoint": "dashboard", "roles": ["member", "manager"], "group": "primary"},
     {"label": "Calendar", "endpoint": "calendar", "roles": ["member", "manager"], "group": "primary"},
     {"label": "Profile", "endpoint": "profile", "roles": ["member", "manager"], "group": "primary"},
-    {"label": "Shifts", "endpoint": "my_shifts", "roles": ["member"], "group": "primary"},
-    {"label": "Shifts", "endpoint": "shifts", "roles": ["manager"], "group": "primary"},
+    {"label": "Shifts", "endpoint": "shifts", "roles": ["member", "manager"], "group": "primary"},
     {"label": "Settings", "endpoint": "settings", "roles": ["member", "manager"], "group": "primary"},
 
     {"label": "Overdue", "endpoint": "overdue", "roles": ["member", "manager"], "group": "secondary"},
@@ -1205,8 +1219,306 @@ def load_logged_in_user(user_id: str):
         return AppUser.from_record(record)
     return None
 
-def load_shifts():            return load_json(SHIFTS_FILE, [])
-def save_shifts(s):           save_json(SHIFTS_FILE, s)
+class ShiftNotFoundError(Exception):
+    """Raised when the requested shift cannot be found for the current user."""
+
+
+def _coerce_shift_id(raw_id: str) -> int | str:
+    if raw_id is None:
+        raise ShiftNotFoundError("Shift id is required.")
+    value = str(raw_id).strip()
+    if not value:
+        raise ShiftNotFoundError("Shift id is required.")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def _parse_time_components(value: str) -> tuple[int, int]:
+    if not value:
+        raise ValueError("Time is required.")
+    text = str(value).strip()
+    parts = text.split(":", 1)
+    if len(parts) != 2:
+        raise ValueError("Time must use HH:MM (24-hour) format.")
+
+    hour_part, minute_part = parts
+    if not hour_part.isdigit() or not minute_part.isdigit():
+        raise ValueError("Time must use HH:MM (24-hour) format.")
+
+    hour = int(hour_part)
+    minute = int(minute_part)
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError("Time must be a valid 24-hour time.")
+    return hour, minute
+
+
+def apply_shift_defaults(shift: dict[str, Any]) -> dict[str, Any]:
+    record: dict[str, Any] = dict(shift or {})
+    record["id"] = str(record.get("id") or uuid.uuid4())
+    assigned = record.get("assigned_to") or record.get("username") or ""
+    record["assigned_to"] = assigned.strip()
+    record["username"] = record["assigned_to"]
+
+    date_value = record.get("date")
+    if isinstance(date_value, date):
+        record["date"] = date_value.isoformat()
+    elif isinstance(date_value, str):
+        record["date"] = date_value.strip()
+    else:
+        record["date"] = ""
+
+    for key in ("start_time", "end_time"):
+        value = record.get(key)
+        if isinstance(value, dtime):
+            record[key] = value.strftime("%H:%M")
+        elif isinstance(value, str):
+            record[key] = value.strip()
+        else:
+            record[key] = ""
+
+    record["notes"] = (record.get("notes") or "").strip()
+    if record["notes"] == "":
+        record["notes"] = ""
+    return record
+
+
+def _shift_to_dict(model: "ShiftModel") -> Dict[str, Any]:
+    return apply_shift_defaults(
+        {
+            "id": str(model.id),
+            "assigned_to": model.username,
+            "username": model.username,
+            "date": model.date.isoformat() if model.date else "",
+            "start_time": model.start_time,
+            "end_time": model.end_time,
+            "notes": model.notes or "",
+            "created_at": model.created_at.isoformat() if model.created_at else None,
+            "updated_at": model.updated_at.isoformat() if model.updated_at else None,
+        }
+    )
+
+
+def load_shifts() -> List[Dict[str, Any]]:
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal() as session:
+            rows = (
+                session.query(ShiftModel)
+                .order_by(ShiftModel.date, ShiftModel.start_time, ShiftModel.id)
+                .all()
+            )
+            if rows:
+                return [_shift_to_dict(row) for row in rows]
+
+    records = load_json(SHIFTS_FILE, [])
+    normalized: list[dict[str, Any]] = []
+    mutated = False
+    for record in records:
+        normalized_record = apply_shift_defaults(record)
+        mutated = mutated or normalized_record != record
+        normalized.append(normalized_record)
+    if mutated:
+        save_json(SHIFTS_FILE, normalized)
+    return normalized
+
+
+def save_shifts(shifts: List[Dict[str, Any]]) -> None:
+    if DB_ENABLED and SessionLocal is not None:
+        raise RuntimeError("save_shifts is only supported with the JSON storage backend.")
+    normalized = [apply_shift_defaults(record) for record in shifts or []]
+    save_json(SHIFTS_FILE, normalized)
+
+
+def load_shifts_for_user(username: str) -> List[Dict[str, Any]]:
+    uname = _norm(username)
+    if not uname:
+        return []
+
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal() as session:
+            rows = (
+                session.query(ShiftModel)
+                .filter(ShiftModel.username == uname)
+                .order_by(ShiftModel.date, ShiftModel.start_time, ShiftModel.id)
+                .all()
+            )
+            if rows:
+                records = [_shift_to_dict(row) for row in rows]
+            else:
+                records = [
+                    shift for shift in load_shifts() if _norm(shift.get("assigned_to")) == uname
+                ]
+    else:
+        records = [
+            shift for shift in load_shifts() if _norm(shift.get("assigned_to")) == uname
+        ]
+
+    today = date.today()
+    upcoming: list[dict[str, Any]] = []
+    for record in records:
+        shift_date = parse_date(record.get("date"))
+        if shift_date and shift_date >= today:
+            upcoming.append(record)
+
+    def sort_key(item: dict[str, Any]) -> tuple:
+        shift_date = parse_date(item.get("date"))
+        try:
+            hour, minute = _parse_time_components(item.get("start_time", "00:00"))
+        except ValueError:
+            hour, minute = (0, 0)
+        return (shift_date or date.max, hour, minute, item.get("id"))
+
+    upcoming.sort(key=sort_key)
+    return upcoming
+
+
+def _clean_shift_payload(
+    date_str: str,
+    start_time: str,
+    end_time: str,
+    notes: str | None,
+) -> tuple[date, str, str, str]:
+    shift_date = parse_date(date_str)
+    if not shift_date:
+        raise ValueError("Please provide a valid shift date (YYYY-MM-DD).")
+
+    start_hour, start_minute = _parse_time_components(start_time)
+    end_hour, end_minute = _parse_time_components(end_time)
+    if (end_hour, end_minute) <= (start_hour, start_minute):
+        raise ValueError("Shift end time must be after the start time.")
+
+    start_label = f"{start_hour:02d}:{start_minute:02d}"
+    end_label = f"{end_hour:02d}:{end_minute:02d}"
+    notes_text = (notes or "").strip()
+    return shift_date, start_label, end_label, notes_text
+
+
+def create_shift_for_user(
+    username: str,
+    date_str: str,
+    start_time: str,
+    end_time: str,
+    notes: str | None = None,
+) -> Dict[str, Any]:
+    uname = _norm(username)
+    if not uname:
+        raise ValueError("A valid user is required to create a shift.")
+
+    shift_date, start_label, end_label, notes_text = _clean_shift_payload(
+        date_str, start_time, end_time, notes
+    )
+
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal() as session:
+            shift = ShiftModel(
+                username=uname,
+                date=shift_date,
+                start_time=start_label,
+                end_time=end_label,
+                notes=notes_text or None,
+            )
+            session.add(shift)
+            session.commit()
+            session.refresh(shift)
+            return _shift_to_dict(shift)
+
+    existing = load_shifts()
+    new_shift = apply_shift_defaults(
+        {
+            "id": str(uuid.uuid4()),
+            "assigned_to": uname,
+            "date": shift_date.isoformat(),
+            "start_time": start_label,
+            "end_time": end_label,
+            "notes": notes_text,
+        }
+    )
+    existing.append(new_shift)
+    save_shifts(existing)
+    return new_shift
+
+
+def update_shift_for_user(
+    username: str,
+    shift_id: str,
+    date_str: str,
+    start_time: str,
+    end_time: str,
+    notes: str | None = None,
+) -> Dict[str, Any]:
+    uname = _norm(username)
+    if not uname:
+        raise ShiftNotFoundError("A valid user is required to update a shift.")
+
+    shift_date, start_label, end_label, notes_text = _clean_shift_payload(
+        date_str, start_time, end_time, notes
+    )
+
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal() as session:
+            identifier = _coerce_shift_id(shift_id)
+            if not isinstance(identifier, int):
+                raise ShiftNotFoundError("Invalid shift id.")
+            shift = session.get(ShiftModel, identifier)
+            if not shift or _norm(shift.username) != uname:
+                raise ShiftNotFoundError("Shift not found.")
+
+            shift.date = shift_date
+            shift.start_time = start_label
+            shift.end_time = end_label
+            shift.notes = notes_text or None
+            shift.updated_at = datetime.utcnow()
+            session.commit()
+            session.refresh(shift)
+            return _shift_to_dict(shift)
+
+    shifts = load_shifts()
+    for index, record in enumerate(shifts):
+        if record.get("id") == str(shift_id) and _norm(record.get("assigned_to")) == uname:
+            updated = apply_shift_defaults(
+                {
+                    **record,
+                    "date": shift_date.isoformat(),
+                    "start_time": start_label,
+                    "end_time": end_label,
+                    "notes": notes_text,
+                }
+            )
+            shifts[index] = updated
+            save_shifts(shifts)
+            return updated
+    raise ShiftNotFoundError("Shift not found.")
+
+
+def delete_shift_for_user(username: str, shift_id: str) -> None:
+    uname = _norm(username)
+    if not uname:
+        raise ShiftNotFoundError("A valid user is required to delete a shift.")
+
+    if DB_ENABLED and SessionLocal is not None:
+        with SessionLocal() as session:
+            identifier = _coerce_shift_id(shift_id)
+            if not isinstance(identifier, int):
+                raise ShiftNotFoundError("Invalid shift id.")
+            shift = session.get(ShiftModel, identifier)
+            if not shift or _norm(shift.username) != uname:
+                raise ShiftNotFoundError("Shift not found.")
+            session.delete(shift)
+            session.commit()
+        return
+
+    shifts = load_shifts()
+    updated = [
+        record
+        for record in shifts
+        if not (
+            record.get("id") == str(shift_id) and _norm(record.get("assigned_to")) == uname
+        )
+    ]
+    if len(updated) == len(shifts):
+        raise ShiftNotFoundError("Shift not found.")
+    save_shifts(updated)
 
 def load_titles():            return load_json(TITLES_FILE, [])
 def save_titles(t):           save_json(TITLES_FILE, t)
@@ -2044,36 +2356,96 @@ def create_task_page():
     return render_template("create_task.html", assignable_users=assignable, all_tags=sorted({tag for task in load_tasks() for tag in normalize_tags(task.get("tags"))}))
 
 # ------------------------------- Shifts -------------------------------
-@app.route("/shifts", endpoint="shifts")
-@manager_required
-def view_shifts():
-    return render_template("shifts.html", shifts=load_shifts())
-
-@app.route("/shifts/add", methods=["GET","POST"])
-@manager_required
+@app.route("/shifts", methods=["GET", "POST"], endpoint="shifts")
+@login_required
 @demo_guard
-def add_shift():
-    if request.method=="POST":
-        d = request.form.get("date")
-        s = request.form.get("start_time")
-        e = request.form.get("end_time")
-        a = request.form.get("assigned_to","").strip().lower()
-        if d and s and e and a:
-            sh = load_shifts()
-            sh.append({"date":d,"start_time":s,"end_time":e,"assigned_to":a,"notes":request.form.get("notes","")})
-            save_shifts(sh)
-            flash("Shift added.")
-            return redirect(url_for("view_shifts"))
-        flash("All fields except notes are required.")
-    users = load_users()
-    return render_template("add_shift.html", employees=[u["username"] for u in users if u.get("role")!="manager"])
+def view_shifts():
+    username = require_username()
+    today_iso = date.today().isoformat()
+    if request.method == "POST":
+        form_defaults = {
+            "date": request.form.get("date", "").strip(),
+            "start_time": request.form.get("start_time", "").strip(),
+            "end_time": request.form.get("end_time", "").strip(),
+            "notes": request.form.get("notes", "").strip(),
+        }
+        try:
+            create_shift_for_user(
+                username,
+                request.form.get("date", ""),
+                request.form.get("start_time", ""),
+                request.form.get("end_time", ""),
+                request.form.get("notes", ""),
+            )
+        except ValueError as exc:
+            flash(str(exc))
+        else:
+            flash("Shift scheduled.")
+            return redirect(url_for("shifts"))
+    else:
+        form_defaults = {
+            "date": today_iso,
+            "start_time": "",
+            "end_time": "",
+            "notes": "",
+        }
+
+    shifts = load_shifts_for_user(username)
+    return render_template(
+        "shifts.html",
+        shifts=shifts,
+        form_defaults=form_defaults,
+        today_iso=today_iso,
+    )
+
+
+@app.route("/shifts/<shift_id>/edit", methods=["POST"])
+@login_required
+@demo_guard
+def edit_shift(shift_id: str):
+    username = require_username()
+    try:
+        update_shift_for_user(
+            username,
+            shift_id,
+            request.form.get("date", ""),
+            request.form.get("start_time", ""),
+            request.form.get("end_time", ""),
+            request.form.get("notes", ""),
+        )
+    except ValueError as exc:
+        flash(str(exc))
+    except ShiftNotFoundError:
+        abort(404)
+    else:
+        flash("Shift updated.")
+    return redirect(url_for("shifts"))
+
+
+@app.route("/shifts/<shift_id>/delete", methods=["POST"])
+@login_required
+@demo_guard
+def delete_shift(shift_id: str):
+    username = require_username()
+    try:
+        delete_shift_for_user(username, shift_id)
+    except ShiftNotFoundError:
+        abort(404)
+    else:
+        flash("Shift removed.")
+    return redirect(url_for("shifts"))
+
+
+@app.route("/shifts/add", endpoint="add_shift")
+@login_required
+def add_shift_legacy():
+    return redirect(url_for("shifts"))
+
 
 @app.route("/my-shifts")
 @login_required
 def my_shifts():
-    u = require_username()
-    sh = [s for s in load_shifts() if _norm(s.get("assigned_to"))==_norm(u)]
-    return render_template("my_shifts.html", shifts=sh)
+    return redirect(url_for("shifts"))
 
 # ------------------------------- Team / Titles -------------------------------
 @app.route("/members", endpoint="team_manager")
@@ -2302,7 +2674,7 @@ def update_task_due_date(task_id: int):
     return jsonify({"ok": True, "due_date": new_due})
 
 
-# Legacy (tasks only) – kept for backward compatibility
+# Legacy (tasks only) - kept for backward compatibility
 @app.route("/api/tasks/events")
 @login_required
 def task_events():

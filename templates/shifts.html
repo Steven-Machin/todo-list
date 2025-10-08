@@ -1,30 +1,320 @@
 {% extends "base.html" %}
-{% block title %}All Shifts{% endblock %}
+{% block title %}My Shifts{% endblock %}
 {% block head_extra %}
-  <style>
-    .shift-list { list-style:none; padding:0; margin-top:12px; }
-    .shift-list li { padding:10px 12px; background:#f6f9fc; border-radius:8px; margin-bottom:8px; }
-  </style>
+<style>
+  .shifts-page {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-bottom: 24px;
+  }
+
+  .shift-card {
+    background: var(--bg-elevated);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 6px 18px -12px var(--shadow-soft);
+  }
+
+  .shift-form h2,
+  .shift-list h2 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 1.25rem;
+  }
+
+  .shift-form form {
+    display: grid;
+    gap: 16px;
+  }
+
+  .shift-form-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .shift-form-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .shift-form-grid input,
+  .shift-form-grid textarea {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-soft);
+    background: var(--bg-muted);
+    color: var(--text-primary);
+  }
+
+  .shift-form-grid textarea {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  @media (min-width: 720px) {
+    .shift-form-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .shift-form-grid textarea {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .shift-table-wrapper {
+    overflow-x: auto;
+  }
+
+  table.shift-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  table.shift-table thead {
+    background: var(--bg-muted);
+  }
+
+  table.shift-table th,
+  table.shift-table td {
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  table.shift-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  table.shift-table td[data-label]::before {
+    content: attr(data-label) ": ";
+    font-weight: 600;
+    display: none;
+    color: var(--text-secondary);
+  }
+
+  .shift-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .shift-actions form {
+    margin: 0;
+  }
+
+  details.shift-edit {
+    background: var(--bg-muted);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+
+  details.shift-edit summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent);
+    list-style: none;
+    outline: none;
+  }
+
+  details.shift-edit[open] summary {
+    margin-bottom: 8px;
+  }
+
+  details.shift-edit form {
+    display: grid;
+    gap: 10px;
+  }
+
+  .shift-edit-grid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .shift-edit-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+  }
+
+  .shift-edit-grid input,
+  .shift-edit-grid textarea {
+    padding: 8px 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+  }
+
+  .shift-edit-grid textarea {
+    min-height: 60px;
+    resize: vertical;
+  }
+
+  .button-secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  .button-secondary:hover {
+    background: var(--accent);
+    color: var(--text-inverse);
+  }
+
+  .shift-delete-button {
+    background: #e11d48;
+    color: var(--text-inverse);
+    border: none;
+  }
+
+  .shift-delete-button:hover {
+    background: #be123c;
+  }
+
+  @media (max-width: 640px) {
+    table.shift-table thead {
+      display: none;
+    }
+
+    table.shift-table,
+    table.shift-table tbody,
+    table.shift-table tr,
+    table.shift-table td {
+      display: block;
+      width: 100%;
+    }
+
+    table.shift-table tr {
+      margin-bottom: 16px;
+      border: 1px solid var(--border-soft);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    table.shift-table td {
+      border: none;
+      padding: 12px;
+    }
+
+    table.shift-table td[data-label]::before {
+      display: inline-block;
+    }
+
+    .shift-actions {
+      gap: 12px;
+    }
+  }
+</style>
 {% endblock %}
 {% block content %}
-  <div class="container">
-    <h1>All Scheduled Shifts</h1>
+<div class="shifts-page">
+  <header>
+    <h1>My Upcoming Shifts</h1>
+    <p class="text-muted">Only you can see and manage these shifts. Times use 24-hour format.</p>
+  </header>
 
-    <div style="display:flex; gap:12px; margin-bottom:12px;">
-      <a class="button-secondary" href="{{ url_for('add_shift') }}">Add New Shift</a>
-      <a class="button-secondary" href="{{ url_for('index') }}">Back to Dashboard</a>
-    </div>
+  <section class="shift-card shift-form" aria-labelledby="schedule-shift-heading">
+    <h2 id="schedule-shift-heading">Schedule a New Shift</h2>
+    <form method="post" action="{{ url_for('shifts') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="shift-form-grid">
+        <label>
+          Date
+          <input type="date" name="date" required value="{{ form_defaults.date }}" min="{{ today_iso }}">
+        </label>
+        <label>
+          Start Time
+          <input type="time" name="start_time" required value="{{ form_defaults.start_time }}">
+        </label>
+        <label>
+          End Time
+          <input type="time" name="end_time" required value="{{ form_defaults.end_time }}">
+        </label>
+        <label>
+          Notes
+          <textarea name="notes" placeholder="Optional details about this shift">{{ form_defaults.notes }}</textarea>
+        </label>
+      </div>
+      <div>
+        <button type="submit">Add Shift</button>
+      </div>
+    </form>
+  </section>
 
+  <section class="shift-card shift-list" aria-labelledby="upcoming-shifts-heading">
+    <h2 id="upcoming-shifts-heading">Upcoming Shifts</h2>
     {% if shifts %}
-      <ul class="shift-list">
-        {% for shift in shifts %}
-          <li>
-            <strong>{{ shift.date }}</strong> | {{ shift.start_time }} - {{ shift.end_time }} | Assigned to: {{ shift.assigned_to.capitalize() }}{% if shift.notes %} - {{ shift.notes }}{% endif %}
-          </li>
-        {% endfor %}
-      </ul>
+      <div class="shift-table-wrapper">
+        <table class="shift-table">
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Start</th>
+              <th scope="col">End</th>
+              <th scope="col">Notes</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for shift in shifts %}
+              <tr>
+                <td data-label="Date">{{ shift.date }}</td>
+                <td data-label="Start">{{ shift.start_time }}</td>
+                <td data-label="End">{{ shift.end_time }}</td>
+                <td data-label="Notes">
+                  {% if shift.notes %}
+                    {{ shift.notes }}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td data-label="Actions">
+                  <div class="shift-actions">
+                    <details class="shift-edit">
+                      <summary>Edit</summary>
+                      <form method="post" action="{{ url_for('edit_shift', shift_id=shift.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="shift-edit-grid">
+                          <label>
+                            Date
+                            <input type="date" name="date" required value="{{ shift.date }}" min="{{ today_iso }}">
+                          </label>
+                          <label>
+                            Start Time
+                            <input type="time" name="start_time" required value="{{ shift.start_time }}">
+                          </label>
+                          <label>
+                            End Time
+                            <input type="time" name="end_time" required value="{{ shift.end_time }}">
+                          </label>
+                          <label>
+                            Notes
+                            <textarea name="notes" placeholder="Optional details">{{ shift.notes }}</textarea>
+                          </label>
+                        </div>
+                        <button type="submit" class="button-secondary">Save Changes</button>
+                      </form>
+                    </details>
+                    <form method="post" action="{{ url_for('delete_shift', shift_id=shift.id) }}" onsubmit="return confirm('Delete this shift?');">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button type="submit" class="shift-delete-button">Delete</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     {% else %}
-      <p>No shifts scheduled yet.</p>
+      <p>You have no upcoming shifts scheduled. Use the form above to add your next shift.</p>
     {% endif %}
-  </div>
+  </section>
+</div>
 {% endblock %}

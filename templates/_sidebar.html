@@ -29,7 +29,7 @@
         <span class="sidebar-section-title">Navigate</span>
         <ul class="sidebar-links">
           {% for item in primary_links %}
-            {% set extra = ['shifts', 'my_shifts'] if item.label == 'Shifts' else None %}
+            {% set extra = ['shifts'] if item.label == 'Shifts' else None %}
             {{ render_link(item, extra) }}
           {% endfor %}
         </ul>
