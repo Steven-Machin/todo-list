@@ -106,6 +106,90 @@
     margin: 0;
   }
 
+  .shift-attendance {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .attendance-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 4px 10px;
+    text-transform: uppercase;
+  }
+
+  .attendance-badge.attendance-attended {
+    background: rgba(47, 167, 122, 0.15);
+    color: #0b5132;
+  }
+
+  .attendance-badge.attendance-missed {
+    background: rgba(230, 73, 45, 0.15);
+    color: #7f1d1d;
+  }
+
+  .attendance-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .attendance-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .attendance-controls form {
+    margin: 0;
+  }
+
+  .attendance-button {
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: var(--bg-muted);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .attendance-button:hover {
+    background: var(--bg-elevated);
+  }
+
+  .attendance-button.is-active {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #ffffff;
+    cursor: default;
+  }
+
+  .attendance-button.is-active:hover {
+    background: #1d4ed8;
+  }
+
+  .attendance-link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .attendance-link:hover {
+    text-decoration: underline;
+  }
+
   details.shift-edit {
     background: var(--bg-muted);
     border-radius: 8px;
@@ -209,6 +293,17 @@
     .shift-actions {
       gap: 12px;
     }
+
+    .attendance-controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .attendance-controls .attendance-button,
+    .attendance-controls .attendance-link {
+      width: 100%;
+      text-align: left;
+    }
   }
 </style>
 {% endblock %}
@@ -258,6 +353,7 @@
               <th scope="col">Start</th>
               <th scope="col">End</th>
               <th scope="col">Notes</th>
+              <th scope="col">Attendance</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -271,8 +367,45 @@
                   {% if shift.notes %}
                     {{ shift.notes }}
                   {% else %}
-                    <span class="text-muted">—</span>
+                    <span class="text-muted">None</span>
                   {% endif %}
+                </td>
+                <td data-label="Attendance">
+                  <div class="shift-attendance">
+                    {% if shift.attendance_status %}
+                      <span class="attendance-badge attendance-{{ shift.attendance_status }}">
+                        {% if shift.attendance_status == 'attended' %}
+                          Attended
+                        {% else %}
+                          Missed
+                        {% endif %}
+                      </span>
+                      {% if shift.attendance_label %}
+                        <div class="attendance-meta">Marked {{ shift.attendance_label }}</div>
+                      {% endif %}
+                    {% else %}
+                      <span class="text-muted">Not yet recorded</span>
+                    {% endif %}
+                    <div class="attendance-controls">
+                      <form method="post" action="{{ url_for('record_shift_attendance', shift_id=shift.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="status" value="attended">
+                        <button type="submit" class="attendance-button{% if shift.attendance_status == 'attended' %} is-active{% endif %}">Mark Attended</button>
+                      </form>
+                      <form method="post" action="{{ url_for('record_shift_attendance', shift_id=shift.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="status" value="missed">
+                        <button type="submit" class="attendance-button{% if shift.attendance_status == 'missed' %} is-active{% endif %}">Mark Missed</button>
+                      </form>
+                      {% if shift.attendance_status %}
+                      <form method="post" action="{{ url_for('record_shift_attendance', shift_id=shift.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="status" value="clear">
+                        <button type="submit" class="attendance-link">Clear</button>
+                      </form>
+                      {% endif %}
+                    </div>
+                  </div>
                 </td>
                 <td data-label="Actions">
                   <div class="shift-actions">

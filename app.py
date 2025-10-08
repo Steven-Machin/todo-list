@@ -86,6 +86,7 @@ def data_path(name: str) -> str:
 TASKS_FILE            = data_path("tasks.json")
 USERS_FILE            = data_path("users.json")
 SHIFTS_FILE           = data_path("shifts.json")
+SHIFT_ATTENDANCE_FILE = data_path("shift_attendance.json")
 TITLES_FILE           = data_path("titles.json")
 
 GROUPS_FILE           = data_path("group_chats.json")
@@ -1254,6 +1255,27 @@ def _parse_time_components(value: str) -> tuple[int, int]:
     return hour, minute
 
 
+def _normalize_attendance_status(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"attended", "missed"}:
+        return text
+    return None
+
+
+def _format_attendance_label(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    stamp = str(value).strip()
+    if not stamp:
+        return ""
+    dt = parse_dt_any(stamp)
+    if not dt:
+        return ""
+    return dt.strftime("%b %d, %Y %H:%M")
+
+
 def apply_shift_defaults(shift: dict[str, Any]) -> dict[str, Any]:
     record: dict[str, Any] = dict(shift or {})
     record["id"] = str(record.get("id") or uuid.uuid4())
@@ -1330,6 +1352,58 @@ def save_shifts(shifts: List[Dict[str, Any]]) -> None:
     save_json(SHIFTS_FILE, normalized)
 
 
+def load_shift_attendance_store() -> Dict[str, Dict[str, Dict[str, Any]]]:
+    raw = load_json(SHIFT_ATTENDANCE_FILE, {})
+    store: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    if not isinstance(raw, dict):
+        return store
+    for user_key, payload in raw.items():
+        if not isinstance(payload, dict):
+            continue
+        normalized_user = _norm(user_key)
+        if not normalized_user:
+            continue
+        cleaned: Dict[str, Dict[str, Any]] = {}
+        for shift_key, entry in payload.items():
+            if not isinstance(entry, dict):
+                continue
+            status = _normalize_attendance_status(entry.get("status"))
+            recorded_at = entry.get("recorded_at")
+            if not status:
+                continue
+            cleaned[str(shift_key)] = {
+                "status": status,
+                "recorded_at": recorded_at,
+            }
+        if cleaned:
+            store[normalized_user] = cleaned
+    return store
+
+
+def save_shift_attendance_store(store: Dict[str, Dict[str, Dict[str, Any]]]) -> None:
+    serializable: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for user_key, payload in (store or {}).items():
+        if not isinstance(payload, dict):
+            continue
+        normalized_user = _norm(user_key)
+        if not normalized_user:
+            continue
+        cleaned: Dict[str, Dict[str, Any]] = {}
+        for shift_key, entry in payload.items():
+            if not isinstance(entry, dict):
+                continue
+            status = _normalize_attendance_status(entry.get("status"))
+            if not status:
+                continue
+            cleaned[str(shift_key)] = {
+                "status": status,
+                "recorded_at": entry.get("recorded_at"),
+            }
+        if cleaned:
+            serializable[normalized_user] = cleaned
+    save_json(SHIFT_ATTENDANCE_FILE, serializable)
+
+
 def load_shifts_for_user(username: str) -> List[Dict[str, Any]]:
     uname = _norm(username)
     if not uname:
@@ -1370,6 +1444,18 @@ def load_shifts_for_user(username: str) -> List[Dict[str, Any]]:
         return (shift_date or date.max, hour, minute, item.get("id"))
 
     upcoming.sort(key=sort_key)
+
+    attendance_store = load_shift_attendance_store()
+    user_attendance = attendance_store.get(uname, {})
+    for record in upcoming:
+        shift_key = str(record.get("id"))
+        attendance_entry = user_attendance.get(shift_key) or {}
+        status = _normalize_attendance_status(attendance_entry.get("status"))
+        recorded_at = attendance_entry.get("recorded_at")
+        record["attendance_status"] = status
+        record["attendance_marked_at"] = recorded_at if recorded_at else None
+        record["attendance_label"] = _format_attendance_label(recorded_at)
+
     return upcoming
 
 
@@ -1519,6 +1605,50 @@ def delete_shift_for_user(username: str, shift_id: str) -> None:
     if len(updated) == len(shifts):
         raise ShiftNotFoundError("Shift not found.")
     save_shifts(updated)
+
+
+def update_shift_attendance(username: str, shift_id: str, status: str | None) -> Optional[Dict[str, Any]]:
+    uname = _norm(username)
+    if not uname:
+        raise ShiftNotFoundError("A valid user is required to update attendance.")
+
+    if status is None:
+        raise ValueError("Attendance status is required.")
+
+    action = str(status).strip().lower()
+    normalized_status = None if action == "clear" else _normalize_attendance_status(action)
+    if action != "clear" and not normalized_status:
+        raise ValueError("Invalid attendance status.")
+
+    target: Optional[dict[str, Any]] = None
+    for record in load_shifts():
+        if _norm(record.get("assigned_to")) != uname:
+            continue
+        if str(record.get("id")) == str(shift_id):
+            target = record
+            break
+    if target is None:
+        raise ShiftNotFoundError("Shift not found.")
+
+    store = load_shift_attendance_store()
+    user_map = store.setdefault(uname, {})
+    shift_key = str(target.get("id"))
+
+    if normalized_status is None:
+        user_map.pop(shift_key, None)
+        if not user_map:
+            store.pop(uname, None)
+        save_shift_attendance_store(store)
+        return None
+
+    entry = {
+        "status": normalized_status,
+        "recorded_at": iso_minutes(datetime.utcnow()),
+    }
+    user_map[shift_key] = entry
+    save_shift_attendance_store(store)
+    return entry
+
 
 def load_titles():            return load_json(TITLES_FILE, [])
 def save_titles(t):           save_json(TITLES_FILE, t)
@@ -2361,6 +2491,7 @@ def create_task_page():
 @demo_guard
 def view_shifts():
     username = require_username()
+    set_breadcrumbs(("Home", url_for("dashboard")), ("Shifts", None))
     today_iso = date.today().isoformat()
     if request.method == "POST":
         form_defaults = {
@@ -2433,6 +2564,30 @@ def delete_shift(shift_id: str):
         abort(404)
     else:
         flash("Shift removed.")
+    return redirect(url_for("shifts"))
+
+
+@app.route("/shifts/<shift_id>/attendance", methods=["POST"])
+@login_required
+@demo_guard
+def record_shift_attendance(shift_id: str):
+    username = require_username()
+    status = (request.form.get("status") or "").strip().lower()
+    try:
+        update_shift_attendance(username, shift_id, status)
+    except ValueError as exc:
+        flash(str(exc))
+    except ShiftNotFoundError:
+        abort(404)
+    else:
+        if status == "clear":
+            flash("Attendance reset.")
+        elif status == "attended":
+            flash("Shift marked as attended.")
+        elif status == "missed":
+            flash("Shift marked as missed.")
+        else:
+            flash("Attendance updated.")
     return redirect(url_for("shifts"))
 
 
@@ -2616,6 +2771,18 @@ def calendar_feed():
         shift_day = parse_date(shift.get("date"))
         if not shift_day:
             continue
+        shift_id = str(shift.get("id"))
+        assigned_to = shift.get("assigned_to")
+        attendance_entry = attendance_store.get(_norm(assigned_to), {}).get(shift_id) or {}
+        attendance_status = _normalize_attendance_status(attendance_entry.get("status"))
+        attendance_recorded_at = attendance_entry.get("recorded_at")
+        shift_classnames: list[str] = []
+        extended_props = {"type": "shift"}
+        if attendance_status:
+            extended_props["attendance_status"] = attendance_status
+            if attendance_recorded_at:
+                extended_props["attendance_recorded_at"] = attendance_recorded_at
+            shift_classnames.append(f"shift-attendance-{attendance_status}")
         events.append({
             "id": f"shift-{j}",
             "title": f"Shift {shift.get('start_time', '')} - {shift.get('end_time', '')}",
@@ -2624,7 +2791,8 @@ def calendar_feed():
             "backgroundColor": "#6C7AE0",
             "borderColor": "#6C7AE0",
             "textColor": "#FFFFFF",
-            "extendedProps": {"type": "shift"},
+            "classNames": shift_classnames,
+            "extendedProps": extended_props,
             "editable": False,
         })
 

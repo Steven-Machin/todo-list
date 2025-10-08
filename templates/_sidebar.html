@@ -11,7 +11,9 @@
     {% endif %}
   {% endfor %}
   <li class="sidebar-item{% if is_current %} active{% endif %}">
-    <a class="sidebar-link" href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
+    <a class="sidebar-link"
+       href="{{ url_for(item.endpoint) }}"
+       {% if is_current %}aria-current="page"{% endif %}>{{ item.label }}</a>
   </li>
 {% endmacro %}
 
