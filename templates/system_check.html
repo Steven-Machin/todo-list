@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}System Check{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+  <header class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">System Check</h1>
+      <p class="text-muted mb-0">A quick snapshot of critical routes and who can access them.</p>
+    </div>
+    <span class="badge bg-secondary-subtle text-secondary-emphasis">
+      Generated {{ generated_at.strftime("%b %d, %Y %H:%M UTC") }}
+    </span>
+  </header>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">Route</th>
+              <th scope="col">Endpoint</th>
+              <th scope="col">Method(s)</th>
+              <th scope="col">Access</th>
+              <th scope="col">Description</th>
+              <th scope="col">URL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for check in checks %}
+              <tr>
+                <th scope="row">{{ check.name }}</th>
+                <td><code>{{ check.endpoint }}</code></td>
+                <td>{{ check.method }}</td>
+                <td>{{ check.access }}</td>
+                <td>{{ check.description }}</td>
+                <td>
+                  {% if check.resolved and check.url %}
+                    <a href="{{ check.url }}">{{ check.url }}</a>
+                  {% else %}
+                    <span class="text-danger">Unresolved</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

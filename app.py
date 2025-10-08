@@ -226,6 +226,7 @@ NAV_ITEMS = [
     {"label": "Team Member Manager", "endpoint": "team_manager", "roles": ["manager"], "group": "management"},
     {"label": "Group Chat Manager", "endpoint": "group_chat_manager", "roles": ["manager"], "group": "management"},
     {"label": "Title Manager", "endpoint": "title_manager", "roles": ["manager"], "group": "management"},
+    {"label": "System Check", "endpoint": "system_check", "roles": ["manager"], "group": "management"},
 ]
 
 BADGE_SLUG_FIRST_STEP = "first_step"
@@ -2656,6 +2657,72 @@ def update_titles():
     save_users(users)
     flash("Titles updated.", "success")
     return redirect(url_for("title_manager"))
+
+
+@app.route("/system-check", endpoint="system_check")
+@manager_required
+def system_check():
+    set_breadcrumbs(("Home", url_for("dashboard")), ("System Check", None))
+    definitions = [
+        {
+            "name": "Dashboard",
+            "endpoint": "dashboard",
+            "method": "GET",
+            "access": "Members & managers",
+            "description": "Primary home experience with tasks overview.",
+        },
+        {
+            "name": "Task Manager",
+            "endpoint": "task_manager",
+            "method": "GET",
+            "access": "Managers",
+            "description": "Manager task triage tools.",
+        },
+        {
+            "name": "Shifts",
+            "endpoint": "shifts",
+            "method": "GET/POST",
+            "access": "Members & managers",
+            "description": "Shift tracking and attendance.",
+        },
+        {
+            "name": "Calendar",
+            "endpoint": "calendar",
+            "method": "GET",
+            "access": "Members & managers",
+            "description": "Task and shift calendar integrations.",
+        },
+        {
+            "name": "Notifications",
+            "endpoint": "notifications_settings",
+            "method": "GET/POST",
+            "access": "Members & managers",
+            "description": "Delivery channels and scheduling preferences.",
+        },
+        {
+            "name": "Group Chat Manager",
+            "endpoint": "group_chat_manager",
+            "method": "GET/POST",
+            "access": "Managers",
+            "description": "Team group chat administration.",
+        },
+    ]
+
+    checks: list[dict[str, Any]] = []
+    for item in definitions:
+        try:
+            url = url_for(item["endpoint"])
+            resolved = True
+        except Exception:
+            url = None
+            resolved = False
+        check = dict(item)
+        check["url"] = url
+        check["resolved"] = resolved
+        checks.append(check)
+
+    generated_at = datetime.utcnow()
+    return render_template("system_check.html", checks=checks, generated_at=generated_at)
 
 # ------------------------------- Calendar -------------------------------
 @app.route("/calendar", endpoint="calendar")
